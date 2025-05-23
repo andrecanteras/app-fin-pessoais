@@ -1,0 +1,1 @@
+# Pacote de testes do aplicativo de finanças pessoais

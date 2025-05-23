@@ -1,0 +1,4 @@
+# Removendo importações automáticas para evitar problemas com PyQt6
+# As importações devem ser feitas explicitamente nos arquivos que precisam delas
+
+__all__ = []  # Lista vazia para não exportar nada automaticamente
