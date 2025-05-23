@@ -5,24 +5,24 @@ from dotenv import load_dotenv
 from src.views.main_window import MainWindow
 from src.database.setup import DatabaseSetup
 
+def load_env():
+    """Carrega variáveis de ambiente considerando se está em desenvolvimento ou executável."""
+    if getattr(sys, 'frozen', False):
+        # Executando como executável
+        base_path = sys._MEIPASS
+    else:
+        # Executando em desenvolvimento
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    env_path = os.path.join(base_path, '.env')
+    load_dotenv(env_path)
+
 def main():
     """Função principal para iniciar o aplicativo."""
-    print("Iniciando aplicativo com PyQt5...")
+    print("Iniciando aplicativo...")
     
     # Carregar variáveis de ambiente
-    load_dotenv()
-    
-    # Verificar se o arquivo .env existe
-    if not os.path.exists('.env'):
-        print("Arquivo .env não encontrado. Crie-o a partir do .env.example")
-        print("Copiando .env.example para .env...")
-        try:
-            with open('.env.example', 'r') as example_file:
-                with open('.env', 'w') as env_file:
-                    env_file.write(example_file.read())
-            print("Arquivo .env criado. Por favor, configure suas credenciais.")
-        except Exception as e:
-            print(f"Erro ao criar arquivo .env: {e}")
+    load_env()
     
     # Iniciar a aplicação Qt
     app = QApplication(sys.argv)
