@@ -15,6 +15,7 @@ Sistema desktop para gerenciamento de finanças pessoais desenvolvido em Python 
 - Python 3.8+
 - PyQt5
 - SQL Server (Azure)
+- ODBC Driver 17 para SQL Server
 - Outras dependências listadas em requirements.txt
 
 ## Configuração
@@ -25,8 +26,16 @@ Sistema desktop para gerenciamento de finanças pessoais desenvolvido em Python 
    - Windows: `venv\Scripts\activate`
    - Linux/Mac: `source venv/bin/activate`
 4. Instale as dependências: `pip install -r requirements.txt`
-5. Configure o arquivo `.env` com as credenciais do banco de dados
+5. Copie `.env.example` para `.env` e configure com suas credenciais
 6. Execute o aplicativo: `python main.py`
+
+## Gerar Executável
+
+Para gerar um executável standalone:
+
+1. Instale o PyInstaller: `pip install pyinstaller`
+2. Execute o script de build: `python build.py`
+3. O executável será gerado na pasta `dist/`
 
 ## Estrutura do Projeto
 
