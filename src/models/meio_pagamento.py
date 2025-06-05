@@ -1,5 +1,5 @@
 from decimal import Decimal
-from src.database.connection import DatabaseConnection
+from src.database.db_helper import get_db_connection
 from src.models.conta import Conta
 from src.models.conta_dimensao import ContaDimensao
 
@@ -18,8 +18,6 @@ class MeioPagamento:
         
         # Objeto relacionado
         self._conta = None
-        # Inicializar a conexão com o banco de dados
-        self.db = DatabaseConnection()
     
     @property
     def conta(self):
@@ -50,8 +48,10 @@ class MeioPagamento:
     
     def salvar(self):
         """Salva ou atualiza um meio de pagamento no banco de dados."""
+        db = get_db_connection()
         try:
-            cursor = self.db.get_cursor()
+            cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             # Verificar se a conta_id referencia uma conta_dimensao válida
             if self.conta_id:
@@ -63,8 +63,8 @@ class MeioPagamento:
             
             if self.id is None:
                 # Inserir novo meio de pagamento
-                cursor.execute("""
-                    INSERT INTO financas_pessoais.meios_pagamento 
+                cursor.execute(f"""
+                    INSERT INTO {schema}.meios_pagamento 
                     (nome, descricao, conta_id, tipo, ativo)
                     VALUES (?, ?, ?, ?, ?)
                 """, (self.nome, self.descricao, self.conta_id, self.tipo, self.ativo))
@@ -74,48 +74,56 @@ class MeioPagamento:
                 self.id = cursor.fetchone()[0]
             else:
                 # Atualizar meio de pagamento existente
-                cursor.execute("""
-                    UPDATE financas_pessoais.meios_pagamento
+                cursor.execute(f"""
+                    UPDATE {schema}.meios_pagamento
                     SET nome = ?, descricao = ?, conta_id = ?, tipo = ?, ativo = ?
                     WHERE id = ?
                 """, (self.nome, self.descricao, self.conta_id, self.tipo, self.ativo, self.id))
             
-            self.db.commit()
+            db.commit()
             return True
             
         except Exception as e:
-            self.db.rollback()
+            db.rollback()
             print(f"Erro ao salvar meio de pagamento: {e}")
             return False
+        finally:
+            db.close()
     
     def excluir(self):
         """Marca um meio de pagamento como inativo (exclusão lógica)."""
         if self.id is None:
             return False
         
+        db = get_db_connection()
         try:
-            cursor = self.db.get_cursor()
-            cursor.execute("UPDATE financas_pessoais.meios_pagamento SET ativo = 0 WHERE id = ?", (self.id,))
-            self.db.commit()
+            cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"UPDATE {schema}.meios_pagamento SET ativo = 0 WHERE id = ?", (self.id,))
+            db.commit()
             self.ativo = False
             return True
             
         except Exception as e:
-            self.db.rollback()
+            db.rollback()
             print(f"Erro ao excluir meio de pagamento: {e}")
             return False
+        finally:
+            db.close()
     
     @staticmethod
     def buscar_por_id(meio_pagamento_id):
         """Busca um meio de pagamento pelo ID."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("SELECT * FROM financas_pessoais.meios_pagamento WHERE id = ?", (meio_pagamento_id,))
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"SELECT * FROM {schema}.meios_pagamento WHERE id = ?", (meio_pagamento_id,))
             row = cursor.fetchone()
             
             if row:
-                # Não fechar a conexão aqui, deixar o objeto gerenciar sua própria conexão
                 return MeioPagamento(
                     id=row.id,
                     nome=row.nome,
@@ -130,16 +138,20 @@ class MeioPagamento:
         except Exception as e:
             print(f"Erro ao buscar meio de pagamento: {e}")
             return None
+        finally:
+            db.close()
     
     @staticmethod
     def listar_todos(apenas_ativos=True, conta_id=None):
         """Lista todos os meios de pagamento, opcionalmente filtrando por conta."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         meios_pagamento = []
         
         try:
             cursor = db.get_cursor()
-            query = "SELECT * FROM financas_pessoais.meios_pagamento WHERE 1=1"
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"SELECT * FROM {schema}.meios_pagamento WHERE 1=1"
             params = []
             
             if apenas_ativos:
@@ -171,16 +183,20 @@ class MeioPagamento:
         except Exception as e:
             print(f"Erro ao listar meios de pagamento: {e}")
             return []
+        finally:
+            db.close()
     
     @staticmethod
     def listar_por_tipo(tipo, apenas_ativos=True):
         """Lista meios de pagamento por tipo."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         meios_pagamento = []
         
         try:
             cursor = db.get_cursor()
-            query = "SELECT * FROM financas_pessoais.meios_pagamento WHERE tipo = ?"
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"SELECT * FROM {schema}.meios_pagamento WHERE tipo = ?"
             params = [tipo]
             
             if apenas_ativos:
@@ -208,3 +224,5 @@ class MeioPagamento:
         except Exception as e:
             print(f"Erro ao listar meios de pagamento por tipo: {e}")
             return []
+        finally:
+            db.close()

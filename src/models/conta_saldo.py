@@ -2,7 +2,7 @@
 Classe para representar os dados financeiros de uma conta bancária.
 """
 from decimal import Decimal
-from src.database.connection import DatabaseConnection
+from src.database.db_helper import get_db_connection
 
 class ContaSaldo:
     """Classe para representar os dados financeiros de uma conta bancária."""
@@ -18,14 +18,15 @@ class ContaSaldo:
     
     def salvar(self):
         """Salva ou atualiza os dados de saldo da conta no banco de dados."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             if self.id is None:
                 # Inserir novo saldo
-                cursor.execute("""
-                    INSERT INTO financas_pessoais.conta_saldos 
+                cursor.execute(f"""
+                    INSERT INTO {schema}.conta_saldos 
                     (conta_dimensao_id, saldo_inicial, saldo_atual)
                     VALUES (?, ?, ?)
                 """, (self.conta_dimensao_id, self.saldo_inicial, self.saldo_atual))
@@ -35,8 +36,8 @@ class ContaSaldo:
                 self.id = cursor.fetchone()[0]
             else:
                 # Atualizar saldo existente
-                cursor.execute("""
-                    UPDATE financas_pessoais.conta_saldos
+                cursor.execute(f"""
+                    UPDATE {schema}.conta_saldos
                     SET saldo_inicial = ?, saldo_atual = ?
                     WHERE id = ?
                 """, (self.saldo_inicial, self.saldo_atual, self.id))
@@ -53,9 +54,10 @@ class ContaSaldo:
     
     def atualizar_saldo(self, valor, tipo):
         """Atualiza o saldo da conta com base no tipo de transação."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             # Calcular novo saldo
             if tipo == 'R':  # Receita
@@ -64,8 +66,8 @@ class ContaSaldo:
                 novo_saldo = self.saldo_atual - valor
             
             # Atualizar saldo no banco de dados
-            cursor.execute("""
-                UPDATE financas_pessoais.conta_saldos 
+            cursor.execute(f"""
+                UPDATE {schema}.conta_saldos 
                 SET saldo_atual = ? 
                 WHERE id = ?
             """, (novo_saldo, self.id))
@@ -86,12 +88,14 @@ class ContaSaldo:
     @staticmethod
     def buscar_por_id(saldo_id):
         """Busca um saldo de conta pelo ID."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("""
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"""
                 SELECT id, conta_dimensao_id, saldo_inicial, saldo_atual, data_criacao
-                FROM financas_pessoais.conta_saldos
+                FROM {schema}.conta_saldos
                 WHERE id = ?
             """, (saldo_id,))
             
@@ -116,12 +120,14 @@ class ContaSaldo:
     @staticmethod
     def buscar_por_dimensao_id(dimensao_id):
         """Busca um saldo de conta pelo ID da dimensão."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("""
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"""
                 SELECT id, conta_dimensao_id, saldo_inicial, saldo_atual, data_criacao
-                FROM financas_pessoais.conta_saldos
+                FROM {schema}.conta_saldos
                 WHERE conta_dimensao_id = ?
             """, (dimensao_id,))
             
@@ -146,17 +152,19 @@ class ContaSaldo:
     @staticmethod
     def obter_saldo_total(apenas_ativas=True):
         """Retorna o saldo total de todas as contas ativas."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            query = """
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"""
                 SELECT SUM(s.saldo_atual) 
-                FROM financas_pessoais.conta_saldos s
+                FROM {schema}.conta_saldos s
             """
             
             if apenas_ativas:
-                query += """
-                    JOIN financas_pessoais.conta_dimensao d ON s.conta_dimensao_id = d.id
+                query += f"""
+                    JOIN {schema}.conta_dimensao d ON s.conta_dimensao_id = d.id
                     WHERE d.ativo = 1
                 """
             

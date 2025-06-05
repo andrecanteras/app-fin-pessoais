@@ -5,20 +5,28 @@ from dotenv import load_dotenv, dotenv_values
 class DatabaseConnection:
     """Classe para gerenciar a conexão com o banco de dados SQL Server na Azure."""
     
-    _instance = None
+    _instances = {}  # Dicionário para armazenar instâncias por ambiente
     
-    def __new__(cls):
-        """Implementação do padrão Singleton para garantir uma única conexão."""
-        if cls._instance is None:
-            cls._instance = super(DatabaseConnection, cls).__new__(cls)
-            cls._instance._connection = None
+    def __new__(cls, environment=None):
+        """Implementação do padrão Singleton por ambiente."""
+        environment = environment or os.getenv('ENVIRONMENT', 'prod')
+        
+        # Criar uma instância separada para cada ambiente
+        if environment not in cls._instances:
+            instance = super(DatabaseConnection, cls).__new__(cls)
+            instance._connection = None
+            instance.environment = environment
+            instance.schema = f"financas_pessoais{'_dev' if environment == 'dev' else ''}"
             
             # Carregar variáveis de ambiente
             load_dotenv(override=True)
             
             # Carregar diretamente do arquivo para garantir
-            cls._instance.env_values = dotenv_values(".env")
-        return cls._instance
+            instance.env_values = dotenv_values(".env")
+            
+            cls._instances[environment] = instance
+            
+        return cls._instances[environment]
     
     def connect(self):
         """Estabelece uma conexão com o banco de dados."""
@@ -47,11 +55,29 @@ class DatabaseConnection:
                     # print("Usando string de conexão construída a partir de variáveis individuais")
                 
                 self._connection = pyodbc.connect(connection_string)
-                # print("Conexão com o banco de dados estabelecida com sucesso.")
+                print(f"Conexão com o banco de dados estabelecida com sucesso. Usando esquema: {self.schema}")
+                
+                # Criar o esquema se não existir
+                self._ensure_schema_exists()
+                
             except pyodbc.Error as e:
                 print(f"Erro ao conectar ao banco de dados: {e}")
                 raise
         return self._connection
+    
+    def _ensure_schema_exists(self):
+        """Garante que o esquema exista."""
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(f"""
+            IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '{self.schema}')
+            BEGIN
+                EXEC('CREATE SCHEMA {self.schema}')
+            END
+            """)
+            self._connection.commit()
+        except Exception as e:
+            print(f"Aviso: Não foi possível verificar/criar o esquema: {e}")
     
     def get_cursor(self):
         """Retorna um cursor para executar consultas SQL."""
@@ -61,8 +87,10 @@ class DatabaseConnection:
     def close(self):
         """Fecha a conexão com o banco de dados."""
         if self._connection:
-            self._connection.close()
-            self._connection = None
+            self._connection.commit()
+            ##NAO FECHAR CONEXAO
+            # self._connection.close()
+            # self._connection = None
             # print("Conexão com o banco de dados fechada.")
     
     def commit(self):
@@ -74,3 +102,12 @@ class DatabaseConnection:
         """Desfaz as alterações no banco de dados."""
         if self._connection:
             self._connection.rollback()
+    
+    def execute_query(self, query, params=None):
+        """Executa uma consulta SQL."""
+        cursor = self.get_cursor()
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        return cursor

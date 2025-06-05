@@ -1,7 +1,7 @@
 """
 Classe para representar os dados descritivos de uma conta bancária.
 """
-from src.database.connection import DatabaseConnection
+from src.database.db_helper import get_db_connection
 
 class ContaDimensao:
     """Classe para representar os dados descritivos de uma conta bancária."""
@@ -25,14 +25,15 @@ class ContaDimensao:
     
     def salvar(self):
         """Salva ou atualiza os dados da dimensão da conta no banco de dados."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             if self.id is None:
                 # Inserir nova dimensão
-                cursor.execute("""
-                    INSERT INTO financas_pessoais.conta_dimensao 
+                cursor.execute(f"""
+                    INSERT INTO {schema}.conta_dimensao 
                     (nome, tipo, instituicao, agencia, conta_contabil, numero_banco, 
                      titular, nome_gerente, contato_gerente, ativo)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -45,8 +46,8 @@ class ContaDimensao:
                 self.id = cursor.fetchone()[0]
             else:
                 # Atualizar dimensão existente
-                cursor.execute("""
-                    UPDATE financas_pessoais.conta_dimensao
+                cursor.execute(f"""
+                    UPDATE {schema}.conta_dimensao
                     SET nome = ?, tipo = ?, instituicao = ?, agencia = ?, 
                         conta_contabil = ?, numero_banco = ?, titular = ?,
                         nome_gerente = ?, contato_gerente = ?, ativo = ?
@@ -70,11 +71,13 @@ class ContaDimensao:
         if self.id is None:
             return False
         
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("""
-                UPDATE financas_pessoais.conta_dimensao 
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"""
+                UPDATE {schema}.conta_dimensao 
                 SET ativo = 0 
                 WHERE id = ?
             """, (self.id,))
@@ -93,14 +96,16 @@ class ContaDimensao:
     @staticmethod
     def buscar_por_id(dimensao_id):
         """Busca uma dimensão de conta pelo ID."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("""
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"""
                 SELECT id, nome, tipo, instituicao, agencia, conta_contabil, 
                        numero_banco, titular, nome_gerente, contato_gerente, 
                        data_criacao, ativo
-                FROM financas_pessoais.conta_dimensao
+                FROM {schema}.conta_dimensao
                 WHERE id = ?
             """, (dimensao_id,))
             
@@ -132,16 +137,18 @@ class ContaDimensao:
     @staticmethod
     def listar_todas(apenas_ativas=True):
         """Lista todas as dimensões de contas."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         dimensoes = []
         
         try:
             cursor = db.get_cursor()
-            query = """
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"""
                 SELECT id, nome, tipo, instituicao, agencia, conta_contabil, 
                        numero_banco, titular, nome_gerente, contato_gerente, 
                        data_criacao, ativo
-                FROM financas_pessoais.conta_dimensao
+                FROM {schema}.conta_dimensao
             """
             
             if apenas_ativas:

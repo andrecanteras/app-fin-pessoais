@@ -1,7 +1,8 @@
 import sys
+import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTabWidget, QMessageBox, QStatusBar, QAction
+    QPushButton, QLabel, QTabWidget, QMessageBox, QStatusBar, QAction, QCheckBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -10,20 +11,31 @@ from src.views.accounts_view import AccountsView
 from src.views.categories_view import CategoriesView
 from src.views.transactions_view import TransactionsView
 from src.views.payment_methods_view import PaymentMethodsView
+from src.views.data_copy_dialog import DataCopyDialog
 
 class MainWindow(QMainWindow):
     """Janela principal do aplicativo de finanças pessoais."""
     
-    def __init__(self):
+    def __init__(self, environment=None):
         super().__init__()
         
-        self.setWindowTitle("Finanças Pessoais")
+        # Verificar ambiente
+        self.environment = environment or os.getenv('ENVIRONMENT', 'prod')
+        
+        # Definir título com indicador de ambiente
+        title = "Finanças Pessoais"
+        if self.environment == 'dev':
+            title += " - DESENVOLVIMENTO"
+            # Opcional: definir estilo diferente para ambiente de desenvolvimento
+            self.setStyleSheet("QMainWindow { border: 2px solid red; }")
+        
+        self.setWindowTitle(title)
         self.setMinimumSize(1000, 600)
         
         # Configurar a barra de status
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Bem-vindo ao Gerenciador de Finanças Pessoais")
+        self.status_bar.showMessage(f"Bem-vindo ao Gerenciador de Finanças Pessoais - Ambiente: {self.environment.upper()}")
         
         # Configurar o menu
         self.setup_menu()
@@ -67,6 +79,15 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
+        # Menu Ferramentas
+        tools_menu = menu_bar.addMenu("&Ferramentas")
+        
+        # Ação para copiar dados de PROD para DEV
+        copy_data_action = QAction("Copiar Dados de &PROD para DEV", self)
+        copy_data_action.setStatusTip("Copiar todos os dados do ambiente de produção para o ambiente de desenvolvimento")
+        copy_data_action.triggered.connect(self.show_data_copy_dialog)
+        tools_menu.addAction(copy_data_action)
+        
         # Menu Relatórios
         reports_menu = menu_bar.addMenu("&Relatórios")
         
@@ -103,6 +124,13 @@ class MainWindow(QMainWindow):
         # Espaçador
         header_layout.addStretch()
         
+        # Indicador de ambiente
+        if self.environment == 'dev':
+            env_label = QLabel("DESENVOLVIMENTO")
+            env_label.setStyleSheet("color: red; font-weight: bold;")
+            header_layout.addWidget(env_label)
+            header_layout.addSpacing(20)
+        
         # Resumo financeiro (placeholder)
         self.balance_label = QLabel("Saldo Total: R$ 0,00")
         self.balance_label.setStyleSheet("font-size: 16px;")
@@ -124,10 +152,6 @@ class MainWindow(QMainWindow):
         # Conectar o sinal de saldo atualizado
         self.accounts_tab.saldo_atualizado.connect(self.update_balance)
         
-        # Aba de Meios de Pagamento
-        self.payment_methods_tab = PaymentMethodsView()
-        self.tabs.addTab(self.payment_methods_tab, "Meios de Pagamento")
-        
         # Aba de Transações
         self.transactions_tab = TransactionsView()
         self.tabs.addTab(self.transactions_tab, "Transações")
@@ -135,6 +159,10 @@ class MainWindow(QMainWindow):
         # Aba de Categorias
         self.categories_tab = CategoriesView()
         self.tabs.addTab(self.categories_tab, "Categorias")
+        
+        # Aba de Meios de Pagamento
+        self.payment_methods_tab = PaymentMethodsView()
+        self.tabs.addTab(self.payment_methods_tab, "Meios de Pagamento")
         
         # Aba de Relatórios (será implementada posteriormente)
         self.reports_tab = QWidget()
@@ -172,6 +200,11 @@ class MainWindow(QMainWindow):
             "Funcionalidade de importação do Notion será implementada em breve."
         )
     
+    def show_data_copy_dialog(self):
+        """Mostra o diálogo para copiar dados de PROD para DEV."""
+        dialog = DataCopyDialog(self)
+        dialog.exec_()
+    
     def show_cash_flow_report(self):
         """Mostra o relatório de fluxo de caixa."""
         QMessageBox.information(
@@ -190,10 +223,11 @@ class MainWindow(QMainWindow):
     
     def show_about(self):
         """Mostra informações sobre o aplicativo."""
+        env_info = f" (Ambiente: {self.environment.upper()})" if self.environment == 'dev' else ""
         QMessageBox.about(
             self,
             "Sobre",
-            "Gerenciador de Finanças Pessoais v1.0\n\n"
+            f"Gerenciador de Finanças Pessoais v1.0{env_info}\n\n"
             "Um aplicativo para controle de finanças pessoais com integração ao SQL Server na Azure e Notion."
         )
     

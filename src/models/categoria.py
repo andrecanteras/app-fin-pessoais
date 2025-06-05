@@ -1,4 +1,4 @@
-from src.database.connection import DatabaseConnection
+from src.database.db_helper import get_db_connection
 
 class Categoria:
     """Classe para representar uma categoria de receita ou despesa com suporte a hierarquia."""
@@ -13,17 +13,18 @@ class Categoria:
         self.nivel = nivel  # Nível na hierarquia (1 para categorias principais)
         self.data_criacao = data_criacao
         self.ativo = ativo
-        self.db = DatabaseConnection()
     
     def salvar(self):
         """Salva ou atualiza uma categoria no banco de dados."""
+        db = get_db_connection()
         try:
-            cursor = self.db.get_cursor()
+            cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             if self.id is None:
                 # Inserir nova categoria
-                cursor.execute("""
-                    INSERT INTO financas_pessoais.categorias 
+                cursor.execute(f"""
+                    INSERT INTO {schema}.categorias 
                     (nome, tipo, descricao, categoria_pai_id, nivel, ativo)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (self.nome, self.tipo, self.descricao, 
@@ -34,46 +35,55 @@ class Categoria:
                 self.id = cursor.fetchone()[0]
             else:
                 # Atualizar categoria existente
-                cursor.execute("""
-                    UPDATE financas_pessoais.categorias
+                cursor.execute(f"""
+                    UPDATE {schema}.categorias
                     SET nome = ?, tipo = ?, descricao = ?, 
                         categoria_pai_id = ?, nivel = ?, ativo = ?
                     WHERE id = ?
                 """, (self.nome, self.tipo, self.descricao, 
                       self.categoria_pai_id, self.nivel, self.ativo, self.id))
             
-            self.db.commit()
+            db.commit()
             return True
             
         except Exception as e:
-            self.db.rollback()
+            db.rollback()
             print(f"Erro ao salvar categoria: {e}")
             return False
+        finally:
+            db.close()
     
     def excluir(self):
         """Marca uma categoria como inativa (exclusão lógica)."""
         if self.id is None:
             return False
         
+        db = get_db_connection()
         try:
-            cursor = self.db.get_cursor()
-            cursor.execute("UPDATE financas_pessoais.categorias SET ativo = 0 WHERE id = ?", (self.id,))
-            self.db.commit()
+            cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"UPDATE {schema}.categorias SET ativo = 0 WHERE id = ?", (self.id,))
+            db.commit()
             self.ativo = False
             return True
             
         except Exception as e:
-            self.db.rollback()
+            db.rollback()
             print(f"Erro ao excluir categoria: {e}")
             return False
+        finally:
+            db.close()
     
     @staticmethod
     def buscar_por_id(categoria_id):
         """Busca uma categoria pelo ID."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("SELECT * FROM financas_pessoais.categorias WHERE id = ?", (categoria_id,))
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"SELECT * FROM {schema}.categorias WHERE id = ?", (categoria_id,))
             row = cursor.fetchone()
             
             if row:
@@ -98,12 +108,14 @@ class Categoria:
     @staticmethod
     def listar_todas(apenas_ativas=True, tipo=None):
         """Lista todas as categorias, opcionalmente filtrando por tipo."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         categorias = []
         
         try:
             cursor = db.get_cursor()
-            query = "SELECT * FROM financas_pessoais.categorias WHERE 1=1"
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"SELECT * FROM {schema}.categorias WHERE 1=1"
             params = []
             
             if apenas_ativas:
@@ -142,13 +154,15 @@ class Categoria:
     @staticmethod
     def obter_subcategorias(categoria_pai_id, apenas_ativas=True):
         """Obtém todas as subcategorias de uma categoria específica."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         categorias = []
         
         try:
             cursor = db.get_cursor()
-            query = """
-                SELECT * FROM financas_pessoais.categorias 
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"""
+                SELECT * FROM {schema}.categorias 
                 WHERE categoria_pai_id = ?
             """
             params = [categoria_pai_id]
@@ -185,13 +199,15 @@ class Categoria:
     @staticmethod
     def obter_categorias_principais(tipo=None, apenas_ativas=True):
         """Obtém todas as categorias de nível superior (sem categoria pai)."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         categorias = []
         
         try:
             cursor = db.get_cursor()
-            query = """
-                SELECT * FROM financas_pessoais.categorias 
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"""
+                SELECT * FROM {schema}.categorias 
                 WHERE categoria_pai_id IS NULL
             """
             params = []
@@ -232,17 +248,19 @@ class Categoria:
     @staticmethod
     def obter_caminho_hierarquico(categoria_id):
         """Obtém o caminho hierárquico completo de uma categoria (ex: 'Alimentação > Restaurantes > Fast Food')."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         caminho = []
         
         try:
+            schema = db.schema  # Obter o esquema atual
+            
             # Função recursiva para obter categorias pai
             def obter_categoria_e_pais(cat_id):
                 if not cat_id:
                     return []
                 
                 cursor = db.get_cursor()
-                cursor.execute("SELECT * FROM financas_pessoais.categorias WHERE id = ?", (cat_id,))
+                cursor.execute(f"SELECT * FROM {schema}.categorias WHERE id = ?", (cat_id,))
                 row = cursor.fetchone()
                 
                 if not row:

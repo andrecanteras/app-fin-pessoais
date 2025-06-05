@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from src.database.connection import DatabaseConnection
+from src.database.db_helper import get_db_connection
 from src.models.conta import Conta
 from src.models.categoria import Categoria
 from src.models.meio_pagamento import MeioPagamento
@@ -55,13 +55,14 @@ class Transacao:
         """Salva ou atualiza uma transação no banco de dados."""
         db = None
         try:
-            db = DatabaseConnection()
+            db = get_db_connection()
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             if self.id is None:
                 # Inserir nova transação
-                cursor.execute("""
-                    INSERT INTO financas_pessoais.transacoes 
+                cursor.execute(f"""
+                    INSERT INTO {schema}.transacoes 
                     (descricao, valor, data_transacao, tipo, categoria_id, conta_id, 
                     meio_pagamento_id, descricao_pagamento, local_transacao, observacao)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -98,8 +99,8 @@ class Transacao:
                     # Continuar mesmo se não conseguir obter a transação original
                 
                 # Atualizar transação existente
-                cursor.execute("""
-                    UPDATE financas_pessoais.transacoes
+                cursor.execute(f"""
+                    UPDATE {schema}.transacoes
                     SET descricao = ?, valor = ?, data_transacao = ?, tipo = ?, 
                         categoria_id = ?, conta_id = ?, meio_pagamento_id = ?,
                         descricao_pagamento = ?, local_transacao = ?, observacao = ?
@@ -154,11 +155,12 @@ class Transacao:
         try:
             if cursor is None:
                 # Se não foi fornecido um cursor, criar uma nova conexão
-                db = DatabaseConnection()
+                db = get_db_connection()
                 cursor = db.get_cursor()
                 close_connection = True
                 
-            cursor.execute("SELECT * FROM financas_pessoais.transacoes WHERE id = ?", (transacao_id,))
+            schema = db.schema if db else get_db_connection().schema
+            cursor.execute(f"SELECT * FROM {schema}.transacoes WHERE id = ?", (transacao_id,))
             row = cursor.fetchone()
             if row:
                 return {
@@ -177,12 +179,13 @@ class Transacao:
     
     def _atualizar_saldo_conta(self, conta_id, valor, tipo):
         """Atualiza o saldo de uma conta."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             # Obter saldo atual
-            cursor.execute("SELECT saldo_atual FROM financas_pessoais.contas WHERE id = ?", (conta_id,))
+            cursor.execute(f"SELECT saldo_atual FROM {schema}.contas WHERE id = ?", (conta_id,))
             row = cursor.fetchone()
             if row:
                 saldo_atual = row.saldo_atual
@@ -194,7 +197,7 @@ class Transacao:
                     novo_saldo = saldo_atual - valor
                 
                 # Atualizar saldo
-                cursor.execute("UPDATE financas_pessoais.contas SET saldo_atual = ? WHERE id = ?", 
+                cursor.execute(f"UPDATE {schema}.contas SET saldo_atual = ? WHERE id = ?", 
                              (novo_saldo, conta_id))
                 db.commit()
         except Exception as e:
@@ -214,10 +217,12 @@ class Transacao:
         valor = self.valor
         
         # Criar uma nova conexão para excluir a transação
-        db_transacao = DatabaseConnection()
+        db_transacao = get_db_connection()
         try:
             cursor = db_transacao.get_cursor()
-            cursor.execute("DELETE FROM financas_pessoais.transacoes WHERE id = ?", (self.id,))
+            schema = db_transacao.schema  # Obter o esquema atual
+            
+            cursor.execute(f"DELETE FROM {schema}.transacoes WHERE id = ?", (self.id,))
             db_transacao.commit()
             
             # Depois reverter o efeito da transação no saldo da conta
@@ -246,23 +251,24 @@ class Transacao:
         Returns:
             Dicionário com total de receitas, despesas e saldo do período
         """
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
+            schema = db.schema  # Obter o esquema atual
             
             # Obter total de receitas
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT COALESCE(SUM(valor), 0) as total
-                FROM financas_pessoais.transacoes
+                FROM {schema}.transacoes
                 WHERE data_transacao BETWEEN ? AND ?
                 AND tipo = 'R'
             """, (data_inicio, data_fim))
             total_receitas = cursor.fetchone()[0] or 0
             
             # Obter total de despesas
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT COALESCE(SUM(valor), 0) as total
-                FROM financas_pessoais.transacoes
+                FROM {schema}.transacoes
                 WHERE data_transacao BETWEEN ? AND ?
                 AND tipo = 'D'
             """, (data_inicio, data_fim))
@@ -290,10 +296,12 @@ class Transacao:
     @staticmethod
     def buscar_por_id(transacao_id):
         """Busca uma transação pelo ID."""
-        db = DatabaseConnection()
+        db = get_db_connection()
         try:
             cursor = db.get_cursor()
-            cursor.execute("SELECT * FROM financas_pessoais.transacoes WHERE id = ?", (transacao_id,))
+            schema = db.schema  # Obter o esquema atual
+            
+            cursor.execute(f"SELECT * FROM {schema}.transacoes WHERE id = ?", (transacao_id,))
             row = cursor.fetchone()
             
             if row:
@@ -338,12 +346,14 @@ class Transacao:
                 - ordenacao: Campo para ordenação
                 - limite: Limite de registros
         """
-        db = DatabaseConnection()
+        db = get_db_connection()
         transacoes = []
         
         try:
             cursor = db.get_cursor()
-            query = "SELECT * FROM financas_pessoais.transacoes WHERE 1=1"
+            schema = db.schema  # Obter o esquema atual
+            
+            query = f"SELECT * FROM {schema}.transacoes WHERE 1=1"
             params = []
             
             if filtros:
@@ -411,55 +421,5 @@ class Transacao:
         except Exception as e:
             print(f"Erro ao listar transações: {e}")
             return []
-        finally:
-            db.close()
-    
-    @staticmethod
-    def obter_resumo_por_periodo(data_inicio, data_fim):
-        """Obtém um resumo das transações em um período específico.
-        
-        Args:
-            data_inicio: Data inicial do período
-            data_fim: Data final do período
-            
-        Returns:
-            Dicionário com os totais de receitas, despesas e saldo do período
-        """
-        db = DatabaseConnection()
-        try:
-            cursor = db.get_cursor()
-            
-            # Obter total de receitas
-            cursor.execute("""
-                SELECT COALESCE(SUM(valor), 0) AS total
-                FROM financas_pessoais.transacoes
-                WHERE tipo = 'R' AND data_transacao BETWEEN ? AND ?
-            """, (data_inicio, data_fim))
-            total_receitas = cursor.fetchone().total or Decimal('0.0')
-            
-            # Obter total de despesas
-            cursor.execute("""
-                SELECT COALESCE(SUM(valor), 0) AS total
-                FROM financas_pessoais.transacoes
-                WHERE tipo = 'D' AND data_transacao BETWEEN ? AND ?
-            """, (data_inicio, data_fim))
-            total_despesas = cursor.fetchone().total or Decimal('0.0')
-            
-            # Calcular saldo do período
-            saldo_periodo = total_receitas - total_despesas
-            
-            return {
-                'total_receitas': total_receitas,
-                'total_despesas': total_despesas,
-                'saldo_periodo': saldo_periodo
-            }
-            
-        except Exception as e:
-            print(f"Erro ao obter resumo por período: {e}")
-            return {
-                'total_receitas': Decimal('0.0'),
-                'total_despesas': Decimal('0.0'),
-                'saldo_periodo': Decimal('0.0')
-            }
         finally:
             db.close()
