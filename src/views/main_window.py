@@ -11,6 +11,7 @@ from src.views.accounts_view import AccountsView
 from src.views.categories_view import CategoriesView
 from src.views.transactions_view import TransactionsView
 from src.views.payment_methods_view import PaymentMethodsView
+from src.views.gastos_recorrentes_view import GastosRecorrentesView
 from src.views.data_copy_dialog import DataCopyDialog
 
 class MainWindow(QMainWindow):
@@ -163,6 +164,10 @@ class MainWindow(QMainWindow):
         # Aba de Meios de Pagamento
         self.payment_methods_tab = PaymentMethodsView()
         self.tabs.addTab(self.payment_methods_tab, "Meios de Pagamento")
+        
+        # Aba de Gastos Recorrentes
+        self.gastos_recorrentes_tab = GastosRecorrentesView()
+        self.tabs.addTab(self.gastos_recorrentes_tab, "Gastos Recorrentes")
         
         # Aba de Relatórios (será implementada posteriormente)
         self.reports_tab = QWidget()
