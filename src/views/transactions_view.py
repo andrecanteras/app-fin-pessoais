@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QMessageBox, QDialog, QFormLayout, QComboBox, 
                             QDialogButtonBox, QHeaderView, QDateEdit, QTextEdit,
                             QTabWidget, QGroupBox, QRadioButton)
-from PyQt5.QtCore import Qt, pyqtSignal, QDate
+from PyQt5.QtCore import Qt, pyqtSignal, QDate, QLocale
 from PyQt5.QtGui import QDoubleValidator
 from decimal import Decimal
 from datetime import datetime, date
@@ -23,6 +23,9 @@ class TransacaoDialog(QDialog):
         super().__init__(parent)
         self.transacao = transacao
         self.setWindowTitle("Nova Transação" if transacao is None else "Editar Transação")
+        # Configurar localização para Brasil (vírgula como separador decimal)
+        self.locale = QLocale(QLocale.Portuguese, QLocale.Brazil)
+        QLocale.setDefault(self.locale)
         self.setup_ui()
         
     def setup_ui(self):
@@ -57,11 +60,14 @@ class TransacaoDialog(QDialog):
         
         # Valor
         self.valor_edit = QLineEdit(self)
-        self.valor_edit.setValidator(QDoubleValidator(0, 1000000, 2))
+        validator = QDoubleValidator(0, 1000000, 2)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.valor_edit.setValidator(validator)
+        # Configurar para usar vírgula como separador decimal
         if self.transacao:
-            self.valor_edit.setText(str(self.transacao.valor))
+            self.valor_edit.setText(str(self.transacao.valor).replace('.', ','))
         else:
-            self.valor_edit.setText("0.00")
+            self.valor_edit.setText("0,00")
         
         # Data
         self.data_edit = QDateEdit(self)
@@ -186,8 +192,14 @@ class TransacaoDialog(QDialog):
         tipo = 'R' if self.receita_radio.isChecked() else 'D'
         
         try:
-            valor = Decimal(self.valor_edit.text())
+            # Substituir vírgula por ponto para conversão para Decimal
+            valor_texto = self.valor_edit.text().replace(',', '.')
+            valor = Decimal(valor_texto)
+            if valor <= 0:
+                QMessageBox.warning(self, "Valor inválido", "O valor deve ser maior que zero.")
+                valor = Decimal('0')
         except:
+            QMessageBox.warning(self, "Valor inválido", "Por favor, insira um valor numérico válido.")
             valor = Decimal('0')
         
         data_transacao = self.data_edit.date().toPyDate()
@@ -382,8 +394,8 @@ class TransactionsView(QWidget):
             self.tabela_transacoes.setItem(row, 5, QTableWidgetItem(conta_nome))
             self.tabela_transacoes.setItem(row, 6, QTableWidgetItem(meio_pagamento_nome))
             
-            # Formatar valor com 2 casas decimais
-            valor_str = f"R$ {float(transacao.valor):.2f}"
+            # Formatar valor com 2 casas decimais usando vírgula como separador
+            valor_str = f"R$ {float(transacao.valor):.2f}".replace('.', ',')
             valor_item = QTableWidgetItem(valor_str)
             valor_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             
@@ -398,9 +410,9 @@ class TransactionsView(QWidget):
         # Atualizar resumo
         saldo_periodo = total_receitas - total_despesas
         
-        self.total_receitas_label.setText(f"Receitas: R$ {float(total_receitas):.2f}")
-        self.total_despesas_label.setText(f"Despesas: R$ {float(total_despesas):.2f}")
-        self.saldo_periodo_label.setText(f"Saldo: R$ {float(saldo_periodo):.2f}")
+        self.total_receitas_label.setText(f"Receitas: R$ {float(total_receitas):.2f}".replace('.', ','))
+        self.total_despesas_label.setText(f"Despesas: R$ {float(total_despesas):.2f}".replace('.', ','))
+        self.saldo_periodo_label.setText(f"Saldo: R$ {float(saldo_periodo):.2f}".replace('.', ','))
         
         # Colorir saldo conforme o valor
         if saldo_periodo >= 0:

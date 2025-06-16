@@ -4,8 +4,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QMessageBox, QDialog, QFormLayout, QComboBox, 
                             QDialogButtonBox, QHeaderView, QTextEdit, QDateEdit,
                             QSpinBox, QCheckBox, QCalendarWidget)
-from PyQt5.QtCore import Qt, pyqtSignal, QDate
-from PyQt5.QtGui import QColor
+from PyQt5.QtCore import Qt, pyqtSignal, QDate, QLocale
+from PyQt5.QtGui import QColor, QDoubleValidator
 from datetime import date, datetime
 from decimal import Decimal
 from src.models.gasto_recorrente import GastoRecorrente
@@ -21,6 +21,9 @@ class GastoRecorrenteDialog(QDialog):
         self.gasto = gasto
         self.setWindowTitle("Novo Gasto Recorrente" if gasto is None else "Editar Gasto Recorrente")
         self.setMinimumWidth(500)
+        # Configurar localização para Brasil (vírgula como separador decimal)
+        self.locale = QLocale(QLocale.Portuguese, QLocale.Brazil)
+        QLocale.setDefault(self.locale)
         self.setup_ui()
         
     def setup_ui(self):
@@ -33,8 +36,13 @@ class GastoRecorrenteDialog(QDialog):
             self.nome_edit.setText(self.gasto.nome)
         
         self.valor_edit = QLineEdit(self)
+        validator = QDoubleValidator(0, 1000000, 2)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.valor_edit.setValidator(validator)
         if self.gasto:
-            self.valor_edit.setText(str(self.gasto.valor))
+            self.valor_edit.setText(str(self.gasto.valor).replace('.', ','))
+        else:
+            self.valor_edit.setText("0,00")
         
         self.dia_vencimento_spin = QSpinBox(self)
         self.dia_vencimento_spin.setRange(1, 31)
@@ -149,8 +157,14 @@ class GastoRecorrenteDialog(QDialog):
         nome = self.nome_edit.text().strip()
         
         try:
-            valor = Decimal(self.valor_edit.text().strip())
+            # Substituir vírgula por ponto para conversão para Decimal
+            valor_texto = self.valor_edit.text().strip().replace(',', '.')
+            valor = Decimal(valor_texto)
+            if valor <= 0:
+                QMessageBox.warning(self, "Valor inválido", "O valor deve ser maior que zero.")
+                valor = Decimal('0.0')
         except:
+            QMessageBox.warning(self, "Valor inválido", "Por favor, insira um valor numérico válido.")
             valor = Decimal('0.0')
         
         dia_vencimento = self.dia_vencimento_spin.value()
@@ -195,7 +209,7 @@ class PagamentoDialog(QDialog):
         layout = QFormLayout(self)
         
         # Informações do gasto
-        info_label = QLabel(f"<b>{self.gasto.nome}</b><br>Valor: R$ {self.gasto.valor:.2f}<br>Vencimento: Dia {self.gasto.dia_vencimento}")
+        info_label = QLabel(f"<b>{self.gasto.nome}</b><br>Valor: R$ {str(self.gasto.valor).replace('.', ',')}<br>Vencimento: Dia {self.gasto.dia_vencimento}")
         layout.addRow(info_label)
         
         # Campos do formulário
@@ -204,7 +218,10 @@ class PagamentoDialog(QDialog):
         self.data_pagamento_edit.setDate(QDate.currentDate())
         
         self.valor_pago_edit = QLineEdit(self)
-        self.valor_pago_edit.setText(str(self.gasto.valor))
+        validator = QDoubleValidator(0, 1000000, 2)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.valor_pago_edit.setValidator(validator)
+        self.valor_pago_edit.setText(str(self.gasto.valor).replace('.', ','))
         
         self.gerar_transacao_check = QCheckBox("Gerar transação")
         self.gerar_transacao_check.setChecked(self.gasto.gerar_transacao)
@@ -227,8 +244,14 @@ class PagamentoDialog(QDialog):
         data_pagamento = self.data_pagamento_edit.date().toPyDate()
         
         try:
-            valor_pago = Decimal(self.valor_pago_edit.text().strip())
+            # Substituir vírgula por ponto para conversão para Decimal
+            valor_texto = self.valor_pago_edit.text().strip().replace(',', '.')
+            valor_pago = Decimal(valor_texto)
+            if valor_pago <= 0:
+                QMessageBox.warning(self, "Valor inválido", "O valor deve ser maior que zero.")
+                valor_pago = self.gasto.valor
         except:
+            QMessageBox.warning(self, "Valor inválido", "Por favor, insira um valor numérico válido.")
             valor_pago = self.gasto.valor
         
         gerar_transacao = self.gerar_transacao_check.isChecked()
@@ -352,7 +375,7 @@ class GastosRecorrentesView(QWidget):
             self.tabela_gastos.setItem(row, 1, QTableWidgetItem(gasto.nome))
             
             # Valor
-            self.tabela_gastos.setItem(row, 2, QTableWidgetItem(f"R$ {gasto.valor:.2f}"))
+            self.tabela_gastos.setItem(row, 2, QTableWidgetItem(f"R$ {gasto.valor:.2f}".replace('.', ',')))
             
             # Vencimento
             self.tabela_gastos.setItem(row, 3, QTableWidgetItem(f"Dia {gasto.dia_vencimento}"))

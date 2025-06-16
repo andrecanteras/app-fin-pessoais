@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
                             QMessageBox, QDialog, QFormLayout, QComboBox, 
                             QDialogButtonBox, QHeaderView)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QLocale
 from PyQt5.QtGui import QDoubleValidator
 from decimal import Decimal
 from src.models.conta import Conta
@@ -18,6 +18,9 @@ class ContaDialog(QDialog):
         super().__init__(parent)
         self.conta = conta
         self.setWindowTitle("Nova Conta" if conta is None else "Editar Conta")
+        # Configurar localização para Brasil (vírgula como separador decimal)
+        self.locale = QLocale(QLocale.Portuguese, QLocale.Brazil)
+        QLocale.setDefault(self.locale)
         self.setup_ui()
         
     def setup_ui(self):
@@ -65,13 +68,15 @@ class ContaDialog(QDialog):
             self.contato_gerente_edit.setText(self.conta.contato_gerente)
         
         self.saldo_inicial_edit = QLineEdit(self)
-        self.saldo_inicial_edit.setValidator(QDoubleValidator(0, 1000000, 2))
+        validator = QDoubleValidator(0, 1000000, 2)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.saldo_inicial_edit.setValidator(validator)
         if self.conta:
-            self.saldo_inicial_edit.setText(str(self.conta.saldo_inicial))
+            self.saldo_inicial_edit.setText(str(self.conta.saldo_inicial).replace('.', ','))
             # Desabilitar edição do saldo inicial se a conta já existe
             self.saldo_inicial_edit.setEnabled(False)
         else:
-            self.saldo_inicial_edit.setText("0.00")
+            self.saldo_inicial_edit.setText("0,00")
         
         # Adicionar campos ao layout
         layout.addRow("Nome:", self.nome_edit)
@@ -106,8 +111,14 @@ class ContaDialog(QDialog):
         contato_gerente = self.contato_gerente_edit.text().strip() or None
         
         try:
-            saldo_inicial = Decimal(self.saldo_inicial_edit.text())
+            # Substituir vírgula por ponto para conversão para Decimal
+            valor_texto = self.saldo_inicial_edit.text().replace(',', '.')
+            saldo_inicial = Decimal(valor_texto)
+            if saldo_inicial < 0:
+                QMessageBox.warning(self, "Valor inválido", "O saldo inicial não pode ser negativo.")
+                saldo_inicial = Decimal('0')
         except:
+            QMessageBox.warning(self, "Valor inválido", "Por favor, insira um valor numérico válido para o saldo inicial.")
             saldo_inicial = Decimal('0')
             
         return {
@@ -216,14 +227,14 @@ class AccountsView(QWidget):
             self.tabela_contas.setItem(row, 7, QTableWidgetItem(conta.titular or ""))
             self.tabela_contas.setItem(row, 8, QTableWidgetItem(conta.nome_gerente or ""))
             
-            # Formatar saldo com 2 casas decimais
-            saldo_item = QTableWidgetItem(f"R$ {float(conta.saldo_atual):.2f}")
+            # Formatar saldo com 2 casas decimais usando vírgula como separador
+            saldo_item = QTableWidgetItem(f"R$ {float(conta.saldo_atual):.2f}".replace('.', ','))
             saldo_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.tabela_contas.setItem(row, 9, saldo_item)
         
         # Atualizar saldo total
         saldo_total = Conta.obter_saldo_total()
-        self.total_label.setText(f"Saldo Total: R$ {float(saldo_total):.2f}")
+        self.total_label.setText(f"Saldo Total: R$ {float(saldo_total):.2f}".replace('.', ','))
         self.saldo_atualizado.emit(saldo_total)
         
     def nova_conta(self):

@@ -156,25 +156,47 @@ class ContaDimensao:
             
             query += " ORDER BY nome"
             
-            cursor.execute(query)
-            rows = cursor.fetchall()
+            # Tentativa com tratamento de erro e retry
+            max_retries = 3
+            retry_count = 0
             
-            for row in rows:
-                dimensao = ContaDimensao(
-                    id=row.id,
-                    nome=row.nome,
-                    tipo=row.tipo,
-                    instituicao=getattr(row, 'instituicao', None),
-                    agencia=getattr(row, 'agencia', None),
-                    conta_contabil=getattr(row, 'conta_contabil', None),
-                    numero_banco=getattr(row, 'numero_banco', None),
-                    titular=getattr(row, 'titular', None),
-                    nome_gerente=getattr(row, 'nome_gerente', None),
-                    contato_gerente=getattr(row, 'contato_gerente', None),
-                    data_criacao=row.data_criacao,
-                    ativo=row.ativo
-                )
-                dimensoes.append(dimensao)
+            while retry_count < max_retries:
+                try:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    
+                    for row in rows:
+                        dimensao = ContaDimensao(
+                            id=row.id,
+                            nome=row.nome,
+                            tipo=row.tipo,
+                            instituicao=getattr(row, 'instituicao', None),
+                            agencia=getattr(row, 'agencia', None),
+                            conta_contabil=getattr(row, 'conta_contabil', None),
+                            numero_banco=getattr(row, 'numero_banco', None),
+                            titular=getattr(row, 'titular', None),
+                            nome_gerente=getattr(row, 'nome_gerente', None),
+                            contato_gerente=getattr(row, 'contato_gerente', None),
+                            data_criacao=row.data_criacao,
+                            ativo=row.ativo
+                        )
+                        dimensoes.append(dimensao)
+                    
+                    break  # Sai do loop se bem-sucedido
+                    
+                except Exception as e:
+                    retry_count += 1
+                    print(f"Erro ao listar dimensões de contas (tentativa {retry_count}/{max_retries}): {e}")
+                    if retry_count >= max_retries:
+                        print("Número máximo de tentativas excedido.")
+                        return []
+                    
+                    # Tentar reconectar antes da próxima tentativa
+                    try:
+                        db = get_db_connection()
+                        cursor = db.get_cursor()
+                    except:
+                        pass
             
             return dimensoes
             
@@ -182,4 +204,7 @@ class ContaDimensao:
             print(f"Erro ao listar dimensões de contas: {e}")
             return []
         finally:
-            db.close()
+            try:
+                db.close()
+            except:
+                pass
