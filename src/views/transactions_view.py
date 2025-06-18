@@ -311,6 +311,10 @@ class TransactionsView(QWidget):
         self.btn_nova.clicked.connect(self.nova_transacao)
         btn_layout.addWidget(self.btn_nova)
         
+        self.btn_duplicar = QPushButton("Duplicar")
+        self.btn_duplicar.clicked.connect(self.duplicar_transacao)
+        btn_layout.addWidget(self.btn_duplicar)
+        
         self.btn_editar = QPushButton("Editar")
         self.btn_editar.clicked.connect(self.editar_transacao)
         btn_layout.addWidget(self.btn_editar)
@@ -453,6 +457,69 @@ class TransactionsView(QWidget):
                 QMessageBox.information(self, "Sucesso", "Transação criada com sucesso!")
             else:
                 QMessageBox.critical(self, "Erro", "Erro ao criar transação.")
+    
+    def duplicar_transacao(self):
+        """Duplica a transação selecionada."""
+        selected_rows = self.tabela_transacoes.selectedItems()
+        if not selected_rows:
+            QMessageBox.warning(self, "Aviso", "Selecione uma transação para duplicar.")
+            return
+        
+        # Obter o ID da transação selecionada
+        row = selected_rows[0].row()
+        transacao_id = int(self.tabela_transacoes.item(row, 0).text())
+        
+        # Buscar a transação no banco de dados
+        transacao_original = Transacao.buscar_por_id(transacao_id)
+        if not transacao_original:
+            QMessageBox.critical(self, "Erro", "Transação não encontrada.")
+            return
+        
+        # Criar uma cópia da transação (sem o ID)
+        transacao_copia = Transacao(
+            descricao=transacao_original.descricao,
+            valor=transacao_original.valor,
+            data_transacao=date.today(),  # Data atual como padrão
+            tipo=transacao_original.tipo,
+            categoria_id=transacao_original.categoria_id,
+            conta_id=transacao_original.conta_id,
+            meio_pagamento_id=transacao_original.meio_pagamento_id,
+            descricao_pagamento=transacao_original.descricao_pagamento,
+            local_transacao=transacao_original.local_transacao,
+            observacao=transacao_original.observacao
+        )
+        
+        # Abrir diálogo de edição com os dados preenchidos
+        dialog = TransacaoDialog(self, transacao_copia)
+        if dialog.exec_() == QDialog.Accepted:
+            dados = dialog.get_transacao_data()
+            
+            if not dados['descricao']:
+                QMessageBox.warning(self, "Erro", "A descrição da transação é obrigatória.")
+                return
+            
+            if dados['valor'] <= 0:
+                QMessageBox.warning(self, "Erro", "O valor deve ser maior que zero.")
+                return
+            
+            # Atualizar dados da transação
+            transacao_copia.descricao = dados['descricao']
+            transacao_copia.valor = dados['valor']
+            transacao_copia.data_transacao = dados['data_transacao']
+            transacao_copia.tipo = dados['tipo']
+            transacao_copia.categoria_id = dados['categoria_id']
+            transacao_copia.conta_id = dados['conta_id']
+            transacao_copia.meio_pagamento_id = dados['meio_pagamento_id']
+            transacao_copia.descricao_pagamento = dados['descricao_pagamento']
+            transacao_copia.local_transacao = dados['local_transacao']
+            transacao_copia.observacao = dados['observacao']
+            
+            # Salvar a nova transação
+            if transacao_copia.salvar():
+                self.carregar_transacoes()
+                QMessageBox.information(self, "Sucesso", "Transação duplicada com sucesso!")
+            else:
+                QMessageBox.critical(self, "Erro", "Erro ao duplicar transação.")
     
     def editar_transacao(self):
         """Abre o diálogo para editar a transação selecionada."""
