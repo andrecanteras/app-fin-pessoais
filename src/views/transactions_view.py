@@ -37,26 +37,31 @@ class TransacaoDialog(QDialog):
         if self.transacao:
             self.descricao_edit.setText(self.transacao.descricao)
         
-        # Tipo (Receita ou Despesa)
+        # Tipo (Receita, Despesa ou Transferência)
         self.tipo_group = QGroupBox("Tipo")
         tipo_layout = QHBoxLayout()
         self.receita_radio = QRadioButton("Receita")
         self.despesa_radio = QRadioButton("Despesa")
+        self.transferencia_radio = QRadioButton("Transferência")
         tipo_layout.addWidget(self.receita_radio)
         tipo_layout.addWidget(self.despesa_radio)
+        tipo_layout.addWidget(self.transferencia_radio)
         self.tipo_group.setLayout(tipo_layout)
         
         if self.transacao:
             if self.transacao.tipo == 'R':
                 self.receita_radio.setChecked(True)
-            else:
+            elif self.transacao.tipo == 'D':
                 self.despesa_radio.setChecked(True)
+            else:  # 'T'
+                self.transferencia_radio.setChecked(True)
         else:
             self.despesa_radio.setChecked(True)  # Padrão
         
         # Conectar mudança de tipo para atualizar categorias
         self.receita_radio.toggled.connect(self.atualizar_categorias)
         self.despesa_radio.toggled.connect(self.atualizar_categorias)
+        self.transferencia_radio.toggled.connect(self.atualizar_categorias)
         
         # Valor
         self.valor_edit = QLineEdit(self)
@@ -171,7 +176,13 @@ class TransacaoDialog(QDialog):
     def atualizar_categorias(self):
         """Atualiza as categorias disponíveis com base no tipo selecionado."""
         self.categoria_combo.clear()
-        tipo = 'R' if self.receita_radio.isChecked() else 'D'
+        
+        if self.receita_radio.isChecked():
+            tipo = 'R'
+        elif self.despesa_radio.isChecked():
+            tipo = 'D'
+        else:  # transferencia_radio
+            tipo = 'T'
         
         categorias = Categoria.listar_todas(apenas_ativas=True, tipo=tipo)
         
@@ -189,7 +200,13 @@ class TransacaoDialog(QDialog):
     def get_transacao_data(self):
         """Retorna os dados da transação do formulário."""
         descricao = self.descricao_edit.text().strip()
-        tipo = 'R' if self.receita_radio.isChecked() else 'D'
+        
+        if self.receita_radio.isChecked():
+            tipo = 'R'
+        elif self.despesa_radio.isChecked():
+            tipo = 'D'
+        else:  # transferencia_radio
+            tipo = 'T'
         
         try:
             # Substituir vírgula por ponto para conversão para Decimal
@@ -244,6 +261,7 @@ class TransactionsView(QWidget):
         self.tipo_combo.addItem("Todos os tipos", None)
         self.tipo_combo.addItem("Receitas", "R")
         self.tipo_combo.addItem("Despesas", "D")
+        self.tipo_combo.addItem("Transferências", "T")
         filtros_layout.addWidget(QLabel("Tipo:"))
         filtros_layout.addWidget(self.tipo_combo)
         
@@ -295,10 +313,12 @@ class TransactionsView(QWidget):
         
         self.total_receitas_label = QLabel("Receitas: R$ 0,00")
         self.total_despesas_label = QLabel("Despesas: R$ 0,00")
+        self.total_transferencias_label = QLabel("Transferências: R$ 0,00")
         self.saldo_periodo_label = QLabel("Saldo: R$ 0,00")
         
         resumo_layout.addWidget(self.total_receitas_label)
         resumo_layout.addWidget(self.total_despesas_label)
+        resumo_layout.addWidget(self.total_transferencias_label)
         resumo_layout.addWidget(self.saldo_periodo_label)
         resumo_layout.addStretch()
         
@@ -359,6 +379,7 @@ class TransactionsView(QWidget):
         # Variáveis para calcular totais
         total_receitas = Decimal('0')
         total_despesas = Decimal('0')
+        total_transferencias = Decimal('0')
         
         # Carregar dados na tabela
         for transacao in transacoes:
@@ -386,14 +407,20 @@ class TransactionsView(QWidget):
             # Atualizar totais
             if transacao.tipo == 'R':
                 total_receitas += transacao.valor
-            else:
+            elif transacao.tipo == 'D':
                 total_despesas += transacao.valor
+            else:  # 'T'
+                total_transferencias += transacao.valor
             
             # Adicionar dados à tabela
             self.tabela_transacoes.setItem(row, 0, QTableWidgetItem(str(transacao.id)))
             self.tabela_transacoes.setItem(row, 1, QTableWidgetItem(data_str))
             self.tabela_transacoes.setItem(row, 2, QTableWidgetItem(transacao.descricao))
-            self.tabela_transacoes.setItem(row, 3, QTableWidgetItem("Receita" if transacao.tipo == 'R' else "Despesa"))
+            
+            # Tipo da transação
+            tipo_display = {"R": "Receita", "D": "Despesa", "T": "Transferência"}
+            self.tabela_transacoes.setItem(row, 3, QTableWidgetItem(tipo_display.get(transacao.tipo, transacao.tipo)))
+            
             self.tabela_transacoes.setItem(row, 4, QTableWidgetItem(categoria_nome))
             self.tabela_transacoes.setItem(row, 5, QTableWidgetItem(conta_nome))
             self.tabela_transacoes.setItem(row, 6, QTableWidgetItem(meio_pagamento_nome))
@@ -406,8 +433,10 @@ class TransactionsView(QWidget):
             # Colorir valor conforme o tipo
             if transacao.tipo == 'R':
                 valor_item.setForeground(Qt.darkGreen)
-            else:
+            elif transacao.tipo == 'D':
                 valor_item.setForeground(Qt.darkRed)
+            else:  # 'T'
+                valor_item.setForeground(Qt.darkBlue)
                 
             self.tabela_transacoes.setItem(row, 7, valor_item)
         
@@ -416,6 +445,7 @@ class TransactionsView(QWidget):
         
         self.total_receitas_label.setText(f"Receitas: R$ {float(total_receitas):.2f}".replace('.', ','))
         self.total_despesas_label.setText(f"Despesas: R$ {float(total_despesas):.2f}".replace('.', ','))
+        self.total_transferencias_label.setText(f"Transferências: R$ {float(total_transferencias):.2f}".replace('.', ','))
         self.saldo_periodo_label.setText(f"Saldo: R$ {float(saldo_periodo):.2f}".replace('.', ','))
         
         # Colorir saldo conforme o valor

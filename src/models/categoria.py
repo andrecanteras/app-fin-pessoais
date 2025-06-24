@@ -1,13 +1,13 @@
 from src.database.db_helper import get_db_connection
 
 class Categoria:
-    """Classe para representar uma categoria de receita ou despesa com suporte a hierarquia."""
+    """Classe para representar uma categoria de receita, despesa ou transferência com suporte a hierarquia."""
     
     def __init__(self, id=None, nome=None, tipo=None, descricao=None, 
                  categoria_pai_id=None, nivel=1, data_criacao=None, ativo=True):
         self.id = id
         self.nome = nome
-        self.tipo = tipo  # 'R' para Receita, 'D' para Despesa
+        self.tipo = tipo  # 'R' para Receita, 'D' para Despesa, 'T' para Transferência
         self.descricao = descricao
         self.categoria_pai_id = categoria_pai_id  # ID da categoria pai (se for subcategoria)
         self.nivel = nivel  # Nível na hierarquia (1 para categorias principais)
@@ -292,3 +292,13 @@ class Categoria:
             return []
         finally:
             db.close()
+    
+    @staticmethod
+    def get_tipo_display(tipo):
+        """Retorna o nome amigável do tipo de categoria."""
+        tipos = {
+            'R': 'Receita',
+            'D': 'Despesa',
+            'T': 'Transferência'
+        }
+        return tipos.get(tipo, tipo)

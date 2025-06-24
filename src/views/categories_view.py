@@ -30,20 +30,24 @@ class CategoriaDialog(QDialog):
         if self.categoria:
             self.nome_edit.setText(self.categoria.nome)
         
-        # Tipo (Receita ou Despesa)
+        # Tipo (Receita, Despesa ou Transferência)
         self.tipo_group = QGroupBox("Tipo")
         tipo_layout = QHBoxLayout()
         self.receita_radio = QRadioButton("Receita")
         self.despesa_radio = QRadioButton("Despesa")
+        self.transferencia_radio = QRadioButton("Transferência")
         tipo_layout.addWidget(self.receita_radio)
         tipo_layout.addWidget(self.despesa_radio)
+        tipo_layout.addWidget(self.transferencia_radio)
         self.tipo_group.setLayout(tipo_layout)
         
         if self.categoria:
             if self.categoria.tipo == 'R':
                 self.receita_radio.setChecked(True)
-            else:
+            elif self.categoria.tipo == 'D':
                 self.despesa_radio.setChecked(True)
+            else:  # 'T'
+                self.transferencia_radio.setChecked(True)
         else:
             self.despesa_radio.setChecked(True)  # Padrão
         
@@ -96,7 +100,14 @@ class CategoriaDialog(QDialog):
     def get_categoria_data(self):
         """Retorna os dados da categoria do formulário."""
         nome = self.nome_edit.text().strip()
-        tipo = 'R' if self.receita_radio.isChecked() else 'D'
+        
+        if self.receita_radio.isChecked():
+            tipo = 'R'
+        elif self.despesa_radio.isChecked():
+            tipo = 'D'
+        else:  # transferencia_radio
+            tipo = 'T'
+        
         descricao = self.descricao_edit.toPlainText().strip() or None
         
         categoria_pai_id = None
@@ -140,6 +151,7 @@ class CategoriesView(QWidget):
         self.tipo_combo.addItem("Todos os tipos", None)
         self.tipo_combo.addItem("Receitas", "R")
         self.tipo_combo.addItem("Despesas", "D")
+        self.tipo_combo.addItem("Transferências", "T")
         filtros_layout.addWidget(QLabel("Tipo:"))
         filtros_layout.addWidget(self.tipo_combo)
         
@@ -229,7 +241,7 @@ class CategoriesView(QWidget):
             
             self.tabela_categorias.setItem(row, 0, QTableWidgetItem(str(categoria.id)))
             self.tabela_categorias.setItem(row, 1, QTableWidgetItem(categoria.nome))
-            self.tabela_categorias.setItem(row, 2, QTableWidgetItem("Receita" if categoria.tipo == 'R' else "Despesa"))
+            self.tabela_categorias.setItem(row, 2, QTableWidgetItem(Categoria.get_tipo_display(categoria.tipo)))
             self.tabela_categorias.setItem(row, 3, QTableWidgetItem(str(categoria.nivel)))
             
             # Buscar nome da categoria pai
@@ -269,7 +281,7 @@ class CategoriesView(QWidget):
             for subcategoria in subcategorias:
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, subcategoria.nome)
-                item.setText(1, "Receita" if subcategoria.tipo == 'R' else "Despesa")
+                item.setText(1, Categoria.get_tipo_display(subcategoria.tipo))
                 item.setText(2, str(subcategoria.id))
                 item.setData(0, Qt.UserRole, subcategoria.id)
                 
@@ -280,7 +292,7 @@ class CategoriesView(QWidget):
         for categoria in categorias_principais:
             item = QTreeWidgetItem(self.arvore_categorias)
             item.setText(0, categoria.nome)
-            item.setText(1, "Receita" if categoria.tipo == 'R' else "Despesa")
+            item.setText(1, Categoria.get_tipo_display(categoria.tipo))
             item.setText(2, str(categoria.id))
             item.setData(0, Qt.UserRole, categoria.id)
             
