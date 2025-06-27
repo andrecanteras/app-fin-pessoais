@@ -58,10 +58,10 @@ class TransacaoDialog(QDialog):
         else:
             self.despesa_radio.setChecked(True)  # Padrão
         
-        # Conectar mudança de tipo para atualizar categorias
-        self.receita_radio.toggled.connect(self.atualizar_categorias)
-        self.despesa_radio.toggled.connect(self.atualizar_categorias)
-        self.transferencia_radio.toggled.connect(self.atualizar_categorias)
+        # Conectar mudança de tipo para atualizar interface
+        self.receita_radio.toggled.connect(self.atualizar_interface_tipo)
+        self.despesa_radio.toggled.connect(self.atualizar_interface_tipo)
+        self.transferencia_radio.toggled.connect(self.atualizar_interface_tipo)
         
         # Valor
         self.valor_edit = QLineEdit(self)
@@ -89,7 +89,8 @@ class TransacaoDialog(QDialog):
         # Categoria
         self.categoria_combo = QComboBox(self)
         
-        # Conta
+        # Conta (para receitas/despesas) ou Conta Origem (para transferências)
+        self.conta_label = QLabel("Conta:")
         self.conta_combo = QComboBox(self)
         self.carregar_contas()
         if self.transacao and self.transacao.conta_id:
@@ -97,7 +98,17 @@ class TransacaoDialog(QDialog):
             if index >= 0:
                 self.conta_combo.setCurrentIndex(index)
         
+        # Conta Destino (apenas para transferências)
+        self.conta_destino_label = QLabel("Conta Destino:")
+        self.conta_destino_combo = QComboBox(self)
+        self.carregar_contas_destino()
+        if self.transacao and self.transacao.conta_destino_id:
+            index = self.conta_destino_combo.findData(self.transacao.conta_destino_id)
+            if index >= 0:
+                self.conta_destino_combo.setCurrentIndex(index)
+        
         # Meio de Pagamento
+        self.meio_pagamento_label = QLabel("Meio de Pagamento:")
         self.meio_pagamento_combo = QComboBox(self)
         self.conta_combo.currentIndexChanged.connect(self.atualizar_meios_pagamento)
         
@@ -140,8 +151,9 @@ class TransacaoDialog(QDialog):
         layout.addRow("Valor (R$):", self.valor_edit)
         layout.addRow("Data:", self.data_edit)
         layout.addRow("Categoria:", self.categoria_combo)
-        layout.addRow("Conta:", self.conta_combo)
-        layout.addRow("Meio de Pagamento:", self.meio_pagamento_combo)
+        layout.addRow(self.conta_label, self.conta_combo)
+        layout.addRow(self.conta_destino_label, self.conta_destino_combo)
+        layout.addRow(self.meio_pagamento_label, self.meio_pagamento_combo)
         layout.addRow("Descrição do Pagamento:", self.descricao_pagamento_edit)
         layout.addRow("Local da Transação:", self.local_transacao_edit)
         layout.addRow("Observação:", self.observacao_edit)
@@ -153,6 +165,9 @@ class TransacaoDialog(QDialog):
         layout.addRow(buttons)
         
         self.setLayout(layout)
+        
+        # Atualizar interface inicial
+        self.atualizar_interface_tipo()
     
     def carregar_contas(self):
         """Carrega as contas disponíveis."""
@@ -161,6 +176,14 @@ class TransacaoDialog(QDialog):
         
         for conta in contas:
             self.conta_combo.addItem(f"{conta.nome} (R$ {float(conta.saldo_atual):.2f})", conta.id)
+    
+    def carregar_contas_destino(self):
+        """Carrega as contas disponíveis para o campo destino."""
+        self.conta_destino_combo.clear()
+        contas = Conta.listar_todas(apenas_ativas=True)
+        
+        for conta in contas:
+            self.conta_destino_combo.addItem(f"{conta.nome} (R$ {float(conta.saldo_atual):.2f})", conta.id)
     
     def atualizar_meios_pagamento(self):
         """Atualiza os meios de pagamento disponíveis para a conta selecionada."""
@@ -197,6 +220,27 @@ class TransacaoDialog(QDialog):
             for subcat in subcategorias:
                 self.categoria_combo.addItem(f"  └─ {subcat.nome}", subcat.id)
     
+    def atualizar_interface_tipo(self):
+        """Atualiza a interface com base no tipo selecionado."""
+        is_transferencia = self.transferencia_radio.isChecked()
+        
+        # Atualizar labels
+        if is_transferencia:
+            self.conta_label.setText("Conta Origem:")
+        else:
+            self.conta_label.setText("Conta:")
+        
+        # Mostrar/ocultar campos específicos de transferência
+        self.conta_destino_label.setVisible(is_transferencia)
+        self.conta_destino_combo.setVisible(is_transferencia)
+        
+        # Para transferências, meio de pagamento não é obrigatório
+        self.meio_pagamento_label.setVisible(not is_transferencia)
+        self.meio_pagamento_combo.setVisible(not is_transferencia)
+        
+        # Atualizar categorias
+        self.atualizar_categorias()
+    
     def get_transacao_data(self):
         """Retorna os dados da transação do formulário."""
         descricao = self.descricao_edit.text().strip()
@@ -222,7 +266,8 @@ class TransacaoDialog(QDialog):
         data_transacao = self.data_edit.date().toPyDate()
         categoria_id = self.categoria_combo.currentData()
         conta_id = self.conta_combo.currentData()
-        meio_pagamento_id = self.meio_pagamento_combo.currentData()
+        conta_destino_id = self.conta_destino_combo.currentData() if tipo == 'T' else None
+        meio_pagamento_id = self.meio_pagamento_combo.currentData() if tipo != 'T' else None
         descricao_pagamento = self.descricao_pagamento_edit.text().strip() or None
         local_transacao = self.local_transacao_edit.text().strip() or None
         observacao = self.observacao_edit.toPlainText().strip() or None
@@ -234,6 +279,7 @@ class TransacaoDialog(QDialog):
             'data_transacao': data_transacao,
             'categoria_id': categoria_id,
             'conta_id': conta_id,
+            'conta_destino_id': conta_destino_id,
             'meio_pagamento_id': meio_pagamento_id,
             'descricao_pagamento': descricao_pagamento,
             'local_transacao': local_transacao,
@@ -288,9 +334,9 @@ class TransactionsView(QWidget):
         layout.addLayout(filtros_layout)
         
         # Tabela de transações
-        self.tabela_transacoes = QTableWidget(0, 8)
+        self.tabela_transacoes = QTableWidget(0, 9)
         self.tabela_transacoes.setHorizontalHeaderLabels([
-            "ID", "Data", "Descrição", "Tipo", "Categoria", "Conta", "Meio de Pagamento", "Valor"
+            "ID", "Data", "Descrição", "Tipo", "Categoria", "Conta", "Conta Destino", "Meio de Pagamento", "Valor"
         ])
         
         # Configurar larguras de coluna
@@ -298,10 +344,11 @@ class TransactionsView(QWidget):
         self.tabela_transacoes.setColumnWidth(1, 100)  # Data
         self.tabela_transacoes.setColumnWidth(2, 200)  # Descrição
         self.tabela_transacoes.setColumnWidth(3, 80)   # Tipo
-        self.tabela_transacoes.setColumnWidth(4, 150)  # Categoria
-        self.tabela_transacoes.setColumnWidth(5, 150)  # Conta
-        self.tabela_transacoes.setColumnWidth(6, 150)  # Meio de Pagamento
-        self.tabela_transacoes.setColumnWidth(7, 100)  # Valor
+        self.tabela_transacoes.setColumnWidth(4, 120)  # Categoria
+        self.tabela_transacoes.setColumnWidth(5, 120)  # Conta
+        self.tabela_transacoes.setColumnWidth(6, 120)  # Conta Destino
+        self.tabela_transacoes.setColumnWidth(7, 120)  # Meio de Pagamento
+        self.tabela_transacoes.setColumnWidth(8, 100)  # Valor
         
         # Configurar comportamento da tabela
         self.tabela_transacoes.setSelectionBehavior(QTableWidget.SelectRows)
@@ -399,6 +446,11 @@ class TransactionsView(QWidget):
             if transacao.conta:
                 conta_nome = transacao.conta.nome
             
+            # Obter nome da conta destino
+            conta_destino_nome = "N/A"
+            if transacao.conta_destino:
+                conta_destino_nome = transacao.conta_destino.nome
+            
             # Obter nome do meio de pagamento
             meio_pagamento_nome = "N/A"
             if transacao.meio_pagamento:
@@ -423,7 +475,8 @@ class TransactionsView(QWidget):
             
             self.tabela_transacoes.setItem(row, 4, QTableWidgetItem(categoria_nome))
             self.tabela_transacoes.setItem(row, 5, QTableWidgetItem(conta_nome))
-            self.tabela_transacoes.setItem(row, 6, QTableWidgetItem(meio_pagamento_nome))
+            self.tabela_transacoes.setItem(row, 6, QTableWidgetItem(conta_destino_nome))
+            self.tabela_transacoes.setItem(row, 7, QTableWidgetItem(meio_pagamento_nome))
             
             # Formatar valor com 2 casas decimais usando vírgula como separador
             valor_str = f"R$ {float(transacao.valor):.2f}".replace('.', ',')
@@ -438,7 +491,7 @@ class TransactionsView(QWidget):
             else:  # 'T'
                 valor_item.setForeground(Qt.darkBlue)
                 
-            self.tabela_transacoes.setItem(row, 7, valor_item)
+            self.tabela_transacoes.setItem(row, 8, valor_item)
         
         # Atualizar resumo
         saldo_periodo = total_receitas - total_despesas
@@ -468,6 +521,16 @@ class TransactionsView(QWidget):
                 QMessageBox.warning(self, "Erro", "O valor deve ser maior que zero.")
                 return
             
+            # Validações específicas para transferência
+            if dados['tipo'] == 'T':
+                if not dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "Para transferências, a conta destino é obrigatória.")
+                    return
+                
+                if dados['conta_id'] == dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "A conta origem e destino devem ser diferentes.")
+                    return
+            
             # Criar e salvar a nova transação
             transacao = Transacao(
                 descricao=dados['descricao'],
@@ -476,6 +539,7 @@ class TransactionsView(QWidget):
                 tipo=dados['tipo'],
                 categoria_id=dados['categoria_id'],
                 conta_id=dados['conta_id'],
+                conta_destino_id=dados['conta_destino_id'],
                 meio_pagamento_id=dados['meio_pagamento_id'],
                 descricao_pagamento=dados['descricao_pagamento'],
                 local_transacao=dados['local_transacao'],
@@ -484,7 +548,10 @@ class TransactionsView(QWidget):
             
             if transacao.salvar():
                 self.carregar_transacoes()
-                QMessageBox.information(self, "Sucesso", "Transação criada com sucesso!")
+                if dados['tipo'] == 'T':
+                    QMessageBox.information(self, "Sucesso", "Transferência criada com sucesso! Duas transações foram geradas automaticamente.")
+                else:
+                    QMessageBox.information(self, "Sucesso", "Transação criada com sucesso!")
             else:
                 QMessageBox.critical(self, "Erro", "Erro ao criar transação.")
     
@@ -513,6 +580,7 @@ class TransactionsView(QWidget):
             tipo=transacao_original.tipo,
             categoria_id=transacao_original.categoria_id,
             conta_id=transacao_original.conta_id,
+            conta_destino_id=transacao_original.conta_destino_id,
             meio_pagamento_id=transacao_original.meio_pagamento_id,
             descricao_pagamento=transacao_original.descricao_pagamento,
             local_transacao=transacao_original.local_transacao,
@@ -532,6 +600,16 @@ class TransactionsView(QWidget):
                 QMessageBox.warning(self, "Erro", "O valor deve ser maior que zero.")
                 return
             
+            # Validações específicas para transferência
+            if dados['tipo'] == 'T':
+                if not dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "Para transferências, a conta destino é obrigatória.")
+                    return
+                
+                if dados['conta_id'] == dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "A conta origem e destino devem ser diferentes.")
+                    return
+            
             # Atualizar dados da transação
             transacao_copia.descricao = dados['descricao']
             transacao_copia.valor = dados['valor']
@@ -539,6 +617,7 @@ class TransactionsView(QWidget):
             transacao_copia.tipo = dados['tipo']
             transacao_copia.categoria_id = dados['categoria_id']
             transacao_copia.conta_id = dados['conta_id']
+            transacao_copia.conta_destino_id = dados['conta_destino_id']
             transacao_copia.meio_pagamento_id = dados['meio_pagamento_id']
             transacao_copia.descricao_pagamento = dados['descricao_pagamento']
             transacao_copia.local_transacao = dados['local_transacao']
@@ -568,6 +647,11 @@ class TransactionsView(QWidget):
             QMessageBox.critical(self, "Erro", "Transação não encontrada.")
             return
         
+        # Verificar se é uma transferência (não permitir edição por enquanto)
+        if transacao.transferencia_id:
+            QMessageBox.warning(self, "Aviso", "Edição de transferências não é permitida. Exclua e crie uma nova transferência.")
+            return
+        
         # Abrir diálogo de edição
         dialog = TransacaoDialog(self, transacao)
         if dialog.exec_() == QDialog.Accepted:
@@ -581,6 +665,16 @@ class TransactionsView(QWidget):
                 QMessageBox.warning(self, "Erro", "O valor deve ser maior que zero.")
                 return
             
+            # Validações específicas para transferência
+            if dados['tipo'] == 'T':
+                if not dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "Para transferências, a conta destino é obrigatória.")
+                    return
+                
+                if dados['conta_id'] == dados['conta_destino_id']:
+                    QMessageBox.warning(self, "Erro", "A conta origem e destino devem ser diferentes.")
+                    return
+            
             # Atualizar dados da transação
             transacao.descricao = dados['descricao']
             transacao.valor = dados['valor']
@@ -588,6 +682,7 @@ class TransactionsView(QWidget):
             transacao.tipo = dados['tipo']
             transacao.categoria_id = dados['categoria_id']
             transacao.conta_id = dados['conta_id']
+            transacao.conta_destino_id = dados['conta_destino_id']
             transacao.meio_pagamento_id = dados['meio_pagamento_id']
             transacao.descricao_pagamento = dados['descricao_pagamento']
             transacao.local_transacao = dados['local_transacao']
@@ -630,6 +725,9 @@ class TransactionsView(QWidget):
         # Excluir a transação
         if transacao.excluir():
             self.carregar_transacoes()
-            QMessageBox.information(self, "Sucesso", "Transação excluída com sucesso!")
+            if transacao.transferencia_id:
+                QMessageBox.information(self, "Sucesso", "Transferência excluída com sucesso! Ambas as transações foram removidas.")
+            else:
+                QMessageBox.information(self, "Sucesso", "Transação excluída com sucesso!")
         else:
             QMessageBox.critical(self, "Erro", "Erro ao excluir transação.")

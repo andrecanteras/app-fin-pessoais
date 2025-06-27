@@ -1,6 +1,7 @@
 import sys
 import os
 from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtGui import QIcon
 from dotenv import load_dotenv
 from src.views.main_window import MainWindow
 from src.database.setup import DatabaseSetup
@@ -28,31 +29,28 @@ def load_env():
     env_path = os.path.join(base_path, '.env')
     load_dotenv(env_path)
 
+def get_icon_path():
+    """Retorna o caminho do ícone considerando se está em desenvolvimento ou executável."""
+    if getattr(sys, 'frozen', False):
+        # Executando como executável
+        base_path = sys._MEIPASS
+    else:
+        # Executando em desenvolvimento
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    # Procurar por arquivos de ícone
+    icon_files = ['icon.ico', 'icon.png', 'app.ico', 'app.png']
+    
+    for icon_file in icon_files:
+        icon_path = os.path.join(base_path, 'assets', icon_file)
+        if os.path.exists(icon_path):
+            return icon_path
+    
+    return None
+
 def main():
-    ## INICIO BLOCO TESTE AMBIENTE ##
-    # """Função principal para iniciar o aplicativo."""
-    # print("Iniciando aplicativo...")
-    
-    # # Selecionar ambiente
-    # environment = select_environment()
-    # os.environ['ENVIRONMENT'] = environment
-    # print(f"Usando ambiente: {environment}")
-    
-    # # TESTE: Verificar se o ambiente está sendo usado corretamente
-    # from src.database.db_helper import get_db_connection
-    # db = get_db_connection()
-    # print(f"Esquema configurado na conexão: {db.schema}")
-    # cursor = db.get_cursor()
-    # cursor.execute("SELECT SCHEMA_NAME()")
-    # schema_atual = cursor.fetchone()[0]
-    # print(f"Esquema atual no banco de dados: {schema_atual}")
-    # db.close()
-
-    ## FIM BLOCO TESTE AMBIENTE ##
-
     """Função principal para iniciar o aplicativo."""
     print("Iniciando aplicativo...")
-    
     
     # Selecionar ambiente
     environment = select_environment()
@@ -67,6 +65,14 @@ def main():
     if not app:
         app = QApplication(sys.argv)
     app.setStyle('Fusion')  # Estilo consistente em diferentes plataformas
+    
+    # Configurar ícone da aplicação
+    icon_path = get_icon_path()
+    if icon_path:
+        app.setWindowIcon(QIcon(icon_path))
+        print(f"Ícone carregado: {icon_path}")
+    else:
+        print("Nenhum ícone encontrado na pasta assets/")
     
     # Configurar o banco de dados
     try:
