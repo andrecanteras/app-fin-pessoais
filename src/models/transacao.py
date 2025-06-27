@@ -1,6 +1,5 @@
 from datetime import datetime
 from decimal import Decimal
-import uuid
 from src.database.db_helper import get_db_connection
 from src.models.conta import Conta
 from src.models.categoria import Categoria
@@ -150,21 +149,34 @@ class Transacao:
             if db:
                 db.close()
     
+    def _gerar_proximo_transferencia_id(self, cursor, schema):
+        """Gera o próximo ID sequencial para transferências."""
+        try:
+            cursor.execute(f"""
+                SELECT ISNULL(MAX(transferencia_id), 0) + 1 
+                FROM {schema}.transacoes 
+                WHERE transferencia_id IS NOT NULL
+            """)
+            return cursor.fetchone()[0]
+        except Exception as e:
+            print(f"Erro ao gerar transferencia_id: {e}")
+            return 1
+    
     def _salvar_transferencia(self, db, cursor, schema):
         """Salva uma transferência como duas transações vinculadas."""
         try:
-            # Gerar ID único para vincular as duas transações
+            # Gerar ID sequencial para vincular as duas transações
             if not self.transferencia_id:
-                self.transferencia_id = str(uuid.uuid4())
+                self.transferencia_id = self._gerar_proximo_transferencia_id(cursor, schema)
             
-            # Transação 1: Débito na conta origem
+            # Transação 1: Débito na conta origem (tipo T)
             cursor.execute(f"""
                 INSERT INTO {schema}.transacoes 
                 (descricao, valor, data_transacao, tipo, categoria_id, conta_id, 
                 meio_pagamento_id, descricao_pagamento, local_transacao, observacao,
                 transferencia_id, conta_destino_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f"{self.descricao} (Origem)", self.valor, self.data_transacao, 'D', 
+            """, (f"{self.descricao} (Origem)", self.valor, self.data_transacao, 'T', 
                 self.categoria_id, self.conta_id, self.meio_pagamento_id,
                 self.descricao_pagamento, self.local_transacao, 
                 f"Transferência para conta destino. {self.observacao or ''}".strip(),
@@ -174,14 +186,14 @@ class Transacao:
             cursor.execute("SELECT @@IDENTITY")
             transacao_origem_id = cursor.fetchone()[0]
             
-            # Transação 2: Crédito na conta destino
+            # Transação 2: Crédito na conta destino (tipo T)
             cursor.execute(f"""
                 INSERT INTO {schema}.transacoes 
                 (descricao, valor, data_transacao, tipo, categoria_id, conta_id, 
                 meio_pagamento_id, descricao_pagamento, local_transacao, observacao,
                 transferencia_id, conta_destino_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f"{self.descricao} (Destino)", self.valor, self.data_transacao, 'R', 
+            """, (f"{self.descricao} (Destino)", self.valor, self.data_transacao, 'T', 
                 self.categoria_id, self.conta_destino_id, None,
                 self.descricao_pagamento, self.local_transacao, 
                 f"Transferência da conta origem. {self.observacao or ''}".strip(),
