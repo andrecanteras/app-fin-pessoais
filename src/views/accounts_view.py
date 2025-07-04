@@ -33,7 +33,7 @@ class ContaDialog(QDialog):
             self.nome_edit.setText(self.conta.nome)
         
         self.tipo_combo = QComboBox(self)
-        self.tipo_combo.addItems(["Corrente", "Poupança", "Investimento", "Carteira", "Outro"])
+        self.tipo_combo.addItems(["Corrente", "Poupança", "Investimento", "Carteira", "Cartão de Crédito", "Outro"])
         if self.conta:
             index = self.tipo_combo.findText(self.conta.tipo)
             if index >= 0:

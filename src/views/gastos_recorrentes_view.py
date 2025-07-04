@@ -105,6 +105,11 @@ class GastoRecorrenteDialog(QDialog):
             if index >= 0:
                 self.meio_pagamento_combo.setCurrentIndex(index)
         
+        # Descrição do Pagamento
+        self.descricao_pagamento_edit = QLineEdit(self)
+        if self.gasto and self.gasto.descricao_pagamento:
+            self.descricao_pagamento_edit.setText(self.gasto.descricao_pagamento)
+        
         # Datas
         self.data_inicio_edit = QDateEdit(self)
         self.data_inicio_edit.setCalendarPopup(True)
@@ -151,6 +156,7 @@ class GastoRecorrenteDialog(QDialog):
         layout.addRow("Categoria:", self.categoria_combo)
         layout.addRow("Conta:", self.conta_combo)
         layout.addRow("Meio de Pagamento:", self.meio_pagamento_combo)
+        layout.addRow("Descrição do Pagamento:", self.descricao_pagamento_edit)
         layout.addRow("Data de Início:", self.data_inicio_edit)
         layout.addRow(self.data_fim_check)
         layout.addRow("Data de Término:", self.data_fim_edit)
@@ -245,6 +251,7 @@ class GastoRecorrenteDialog(QDialog):
         data_fim = self.data_fim_edit.date().toPyDate() if self.data_fim_check.isChecked() else None
         
         gerar_transacao = self.gerar_transacao_check.isChecked()
+        descricao_pagamento = self.descricao_pagamento_edit.text().strip() or None
         observacao = self.observacao_edit.toPlainText().strip() or None
         
         return {
@@ -259,6 +266,7 @@ class GastoRecorrenteDialog(QDialog):
             'data_inicio': data_inicio,
             'data_fim': data_fim,
             'gerar_transacao': gerar_transacao,
+            'descricao_pagamento': descricao_pagamento,
             'observacao': observacao
         }
 
@@ -471,6 +479,7 @@ class GastosRecorrentesView(QWidget):
                 data_inicio=dados['data_inicio'],
                 data_fim=dados['data_fim'],
                 gerar_transacao=dados['gerar_transacao'],
+                descricao_pagamento=dados['descricao_pagamento'],
                 observacao=dados['observacao']
             )
             
@@ -514,6 +523,7 @@ class GastosRecorrentesView(QWidget):
             gasto.data_inicio = dados['data_inicio']
             gasto.data_fim = dados['data_fim']
             gasto.gerar_transacao = dados['gerar_transacao']
+            gasto.descricao_pagamento = dados['descricao_pagamento']
             gasto.observacao = dados['observacao']
             
             if gasto.salvar():

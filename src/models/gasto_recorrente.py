@@ -13,7 +13,7 @@ class GastoRecorrente:
     def __init__(self, id=None, nome=None, valor=0.0, dia_vencimento=1, 
                  periodicidade="Mensal", tipo='D', categoria_id=None, conta_id=None, 
                  meio_pagamento_id=None, data_inicio=None, data_fim=None,
-                 gerar_transacao=False, observacao=None, ativo=True, data_criacao=None):
+                 gerar_transacao=False, descricao_pagamento=None, observacao=None, ativo=True, data_criacao=None):
         self.id = id
         self.nome = nome
         self.valor = Decimal(str(valor)) if valor is not None else Decimal('0.0')
@@ -26,6 +26,7 @@ class GastoRecorrente:
         self.data_inicio = data_inicio if data_inicio else date.today()
         self.data_fim = data_fim
         self.gerar_transacao = gerar_transacao
+        self.descricao_pagamento = descricao_pagamento
         self.observacao = observacao
         self.ativo = ativo
         self.data_criacao = data_criacao
@@ -67,12 +68,12 @@ class GastoRecorrente:
                     INSERT INTO {schema}.gastos_recorrentes 
                     (nome, valor, dia_vencimento, periodicidade, tipo, categoria_id, 
                      conta_id, meio_pagamento_id, data_inicio, data_fim, 
-                     gerar_transacao, observacao, ativo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     gerar_transacao, descricao_pagamento, observacao, ativo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (self.nome, self.valor, self.dia_vencimento, self.periodicidade, 
                       self.tipo, self.categoria_id, self.conta_id, self.meio_pagamento_id, 
                       self.data_inicio, self.data_fim, self.gerar_transacao, 
-                      self.observacao, self.ativo))
+                      self.descricao_pagamento, self.observacao, self.ativo))
                 
                 # Obter o ID gerado
                 cursor.execute("SELECT @@IDENTITY")
@@ -87,12 +88,12 @@ class GastoRecorrente:
                     SET nome = ?, valor = ?, dia_vencimento = ?, periodicidade = ?, 
                         tipo = ?, categoria_id = ?, conta_id = ?, meio_pagamento_id = ?, 
                         data_inicio = ?, data_fim = ?, gerar_transacao = ?, 
-                        observacao = ?, ativo = ?
+                        descricao_pagamento = ?, observacao = ?, ativo = ?
                     WHERE id = ?
                 """, (self.nome, self.valor, self.dia_vencimento, self.periodicidade, 
                       self.tipo, self.categoria_id, self.conta_id, self.meio_pagamento_id, 
                       self.data_inicio, self.data_fim, self.gerar_transacao, 
-                      self.observacao, self.ativo, self.id))
+                      self.descricao_pagamento, self.observacao, self.ativo, self.id))
             
             db.commit()
             return True
@@ -168,7 +169,7 @@ class GastoRecorrente:
                     categoria_id=self.categoria_id,
                     conta_id=self.conta_id,
                     meio_pagamento_id=self.meio_pagamento_id,
-                    descricao_pagamento=f"Pagamento recorrente - {self.nome}",
+                    descricao_pagamento=self.descricao_pagamento or f"Pagamento recorrente - {self.nome}",
                     observacao=f"Pagamento automático de gasto recorrente: {self.nome}"
                 )
                 
@@ -264,6 +265,7 @@ class GastoRecorrente:
                     data_inicio=row.data_inicio,
                     data_fim=row.data_fim,
                     gerar_transacao=row.gerar_transacao,
+                    descricao_pagamento=getattr(row, 'descricao_pagamento', None),
                     observacao=row.observacao,
                     ativo=row.ativo,
                     data_criacao=row.data_criacao
@@ -306,6 +308,7 @@ class GastoRecorrente:
                     data_inicio=row.data_inicio,
                     data_fim=row.data_fim,
                     gerar_transacao=row.gerar_transacao,
+                    descricao_pagamento=getattr(row, 'descricao_pagamento', None),
                     observacao=row.observacao,
                     ativo=row.ativo,
                     data_criacao=row.data_criacao

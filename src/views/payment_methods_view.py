@@ -29,7 +29,7 @@ class MeioPagamentoDialog(QDialog):
             self.nome_edit.setText(self.meio_pagamento.nome)
         
         self.tipo_combo = QComboBox(self)
-        self.tipo_combo.addItems(["Cartão de Crédito", "Cartão de Débito", "Dinheiro", "PIX", "Transferência", "Outro"])
+        self.tipo_combo.addItems(["Cartão de Crédito", "Cartão de Débito", "Dinheiro", "PIX", "Transferência", "Débito Automático", "Outro"])
         if self.meio_pagamento and self.meio_pagamento.tipo:
             index = self.tipo_combo.findText(self.meio_pagamento.tipo)
             if index >= 0:
@@ -101,7 +101,7 @@ class PaymentMethodsView(QWidget):
         # Filtro por tipo
         self.tipo_combo = QComboBox()
         self.tipo_combo.addItem("Todos os tipos", None)
-        self.tipo_combo.addItems(["Cartão de Crédito", "Cartão de Débito", "Dinheiro", "PIX", "Transferência", "Outro"])
+        self.tipo_combo.addItems(["Cartão de Crédito", "Cartão de Débito", "Dinheiro", "PIX", "Transferência", "Débito Automático", "Outro"])
         filtros_layout.addWidget(QLabel("Tipo:"))
         filtros_layout.addWidget(self.tipo_combo)
         
