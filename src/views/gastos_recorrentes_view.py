@@ -1,9 +1,8 @@
-# src/views/gastos_recorrentes_view.py
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                             QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
                             QMessageBox, QDialog, QFormLayout, QComboBox, 
                             QDialogButtonBox, QHeaderView, QTextEdit, QDateEdit,
-                            QSpinBox, QCheckBox, QCalendarWidget)
+                            QSpinBox, QCheckBox, QGroupBox, QRadioButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QDate, QLocale
 from PyQt5.QtGui import QColor, QDoubleValidator
 from datetime import date, datetime
@@ -21,7 +20,6 @@ class GastoRecorrenteDialog(QDialog):
         self.gasto = gasto
         self.setWindowTitle("Novo Gasto Recorrente" if gasto is None else "Editar Gasto Recorrente")
         self.setMinimumWidth(500)
-        # Configurar localização para Brasil (vírgula como separador decimal)
         self.locale = QLocale(QLocale.Portuguese, QLocale.Brazil)
         QLocale.setDefault(self.locale)
         self.setup_ui()
@@ -30,11 +28,37 @@ class GastoRecorrenteDialog(QDialog):
         """Configura a interface do diálogo."""
         layout = QFormLayout(self)
         
-        # Campos do formulário
+        # Nome
         self.nome_edit = QLineEdit(self)
         if self.gasto:
             self.nome_edit.setText(self.gasto.nome)
         
+        # Tipo
+        self.tipo_group = QGroupBox("Tipo")
+        tipo_layout = QHBoxLayout()
+        self.receita_radio = QRadioButton("Receita")
+        self.despesa_radio = QRadioButton("Despesa")
+        self.transferencia_radio = QRadioButton("Transferência")
+        tipo_layout.addWidget(self.receita_radio)
+        tipo_layout.addWidget(self.despesa_radio)
+        tipo_layout.addWidget(self.transferencia_radio)
+        self.tipo_group.setLayout(tipo_layout)
+        
+        if self.gasto and hasattr(self.gasto, 'tipo'):
+            if self.gasto.tipo == 'R':
+                self.receita_radio.setChecked(True)
+            elif self.gasto.tipo == 'D':
+                self.despesa_radio.setChecked(True)
+            else:
+                self.transferencia_radio.setChecked(True)
+        else:
+            self.despesa_radio.setChecked(True)
+        
+        self.receita_radio.toggled.connect(self.atualizar_categorias)
+        self.despesa_radio.toggled.connect(self.atualizar_categorias)
+        self.transferencia_radio.toggled.connect(self.atualizar_categorias)
+        
+        # Valor
         self.valor_edit = QLineEdit(self)
         validator = QDoubleValidator(0, 1000000, 2)
         validator.setNotation(QDoubleValidator.StandardNotation)
@@ -44,6 +68,7 @@ class GastoRecorrenteDialog(QDialog):
         else:
             self.valor_edit.setText("0,00")
         
+        # Dia vencimento
         self.dia_vencimento_spin = QSpinBox(self)
         self.dia_vencimento_spin.setRange(1, 31)
         if self.gasto:
@@ -51,6 +76,7 @@ class GastoRecorrenteDialog(QDialog):
         else:
             self.dia_vencimento_spin.setValue(1)
         
+        # Periodicidade
         self.periodicidade_combo = QComboBox(self)
         self.periodicidade_combo.addItems(["Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"])
         if self.gasto and self.gasto.periodicidade:
@@ -58,48 +84,28 @@ class GastoRecorrenteDialog(QDialog):
             if index >= 0:
                 self.periodicidade_combo.setCurrentIndex(index)
         
+        # Categoria
         self.categoria_combo = QComboBox(self)
-        self.categoria_combo.addItem("Nenhuma", None)
         
-        # Carregar categorias
-        categorias = Categoria.listar_todas(apenas_ativas=True)
-        for categoria in categorias:
-            self.categoria_combo.addItem(f"{categoria.nome}", categoria.id)
-        
-        # Se for edição, selecionar a categoria
-        if self.gasto and self.gasto.categoria_id:
-            index = self.categoria_combo.findData(self.gasto.categoria_id)
-            if index >= 0:
-                self.categoria_combo.setCurrentIndex(index)
-        
+        # Conta
         self.conta_combo = QComboBox(self)
-        self.conta_combo.addItem("Nenhuma", None)
-        
-        # Carregar contas
-        contas = Conta.listar_todas(apenas_ativas=True)
-        for conta in contas:
-            self.conta_combo.addItem(f"{conta.nome} ({conta.tipo})", conta.id)
-        
-        # Se for edição, selecionar a conta
+        self.carregar_contas()
         if self.gasto and self.gasto.conta_id:
             index = self.conta_combo.findData(self.gasto.conta_id)
             if index >= 0:
                 self.conta_combo.setCurrentIndex(index)
         
+        # Meio de pagamento
         self.meio_pagamento_combo = QComboBox(self)
-        self.meio_pagamento_combo.addItem("Nenhum", None)
+        self.conta_combo.currentIndexChanged.connect(self.atualizar_meios_pagamento)
+        self.atualizar_meios_pagamento()
         
-        # Carregar meios de pagamento
-        meios_pagamento = MeioPagamento.listar_todos(apenas_ativos=True)
-        for meio in meios_pagamento:
-            self.meio_pagamento_combo.addItem(f"{meio.nome}", meio.id)
-        
-        # Se for edição, selecionar o meio de pagamento
         if self.gasto and self.gasto.meio_pagamento_id:
             index = self.meio_pagamento_combo.findData(self.gasto.meio_pagamento_id)
             if index >= 0:
                 self.meio_pagamento_combo.setCurrentIndex(index)
         
+        # Datas
         self.data_inicio_edit = QDateEdit(self)
         self.data_inicio_edit.setCalendarPopup(True)
         self.data_inicio_edit.setDate(QDate.currentDate() if not self.gasto or not self.gasto.data_inicio else QDate(self.gasto.data_inicio.year, self.gasto.data_inicio.month, self.gasto.data_inicio.day))
@@ -107,7 +113,7 @@ class GastoRecorrenteDialog(QDialog):
         self.data_fim_edit = QDateEdit(self)
         self.data_fim_edit.setCalendarPopup(True)
         self.data_fim_edit.setDate(QDate.currentDate().addYears(1))
-        self.data_fim_edit.setEnabled(False)  # Desabilitado por padrão
+        self.data_fim_edit.setEnabled(False)
         
         self.data_fim_check = QCheckBox("Definir data de término")
         self.data_fim_check.setChecked(False)
@@ -117,17 +123,28 @@ class GastoRecorrenteDialog(QDialog):
             self.data_fim_check.setChecked(True)
             self.data_fim_edit.setDate(QDate(self.gasto.data_fim.year, self.gasto.data_fim.month, self.gasto.data_fim.day))
         
+        # Gerar transação
         self.gerar_transacao_check = QCheckBox("Gerar transação automaticamente")
         if self.gasto:
             self.gerar_transacao_check.setChecked(self.gasto.gerar_transacao)
         
+        # Observação
         self.observacao_edit = QTextEdit(self)
         self.observacao_edit.setMaximumHeight(80)
         if self.gasto and self.gasto.observacao:
             self.observacao_edit.setText(self.gasto.observacao)
         
-        # Adicionar campos ao layout
+        # Carregar categorias iniciais
+        self.atualizar_categorias()
+        
+        if self.gasto and self.gasto.categoria_id:
+            index = self.categoria_combo.findData(self.gasto.categoria_id)
+            if index >= 0:
+                self.categoria_combo.setCurrentIndex(index)
+        
+        # Layout
         layout.addRow("Nome:", self.nome_edit)
+        layout.addRow(self.tipo_group)
         layout.addRow("Valor:", self.valor_edit)
         layout.addRow("Dia de Vencimento:", self.dia_vencimento_spin)
         layout.addRow("Periodicidade:", self.periodicidade_combo)
@@ -140,13 +157,58 @@ class GastoRecorrenteDialog(QDialog):
         layout.addRow(self.gerar_transacao_check)
         layout.addRow("Observação:", self.observacao_edit)
         
-        # Botões
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
         
         self.setLayout(layout)
+    
+    def carregar_contas(self):
+        """Carrega as contas disponíveis."""
+        self.conta_combo.clear()
+        self.conta_combo.addItem("Nenhuma", None)
+        contas = Conta.listar_todas(apenas_ativas=True)
+        
+        for conta in contas:
+            self.conta_combo.addItem(f"{conta.nome} (R$ {float(conta.saldo_atual):.2f})", conta.id)
+    
+    def atualizar_meios_pagamento(self):
+        """Atualiza os meios de pagamento disponíveis para a conta selecionada."""
+        self.meio_pagamento_combo.clear()
+        self.meio_pagamento_combo.addItem("Nenhum", None)
+        conta_id = self.conta_combo.currentData()
+        
+        if conta_id:
+            meios_pagamento = MeioPagamento.listar_todos(apenas_ativos=True, conta_id=conta_id)
+            
+            for meio in meios_pagamento:
+                self.meio_pagamento_combo.addItem(f"{meio.nome} ({meio.tipo})", meio.id)
+    
+    def atualizar_categorias(self):
+        """Atualiza as categorias disponíveis com base no tipo selecionado."""
+        self.categoria_combo.clear()
+        self.categoria_combo.addItem("Nenhuma", None)
+        
+        if self.receita_radio.isChecked():
+            tipo = 'R'
+        elif self.despesa_radio.isChecked():
+            tipo = 'D'
+        else:
+            tipo = 'T'
+        
+        categorias = Categoria.listar_todas(apenas_ativas=True, tipo=tipo)
+        
+        # Organizar categorias por hierarquia
+        categorias_principais = [c for c in categorias if not c.categoria_pai_id]
+        
+        for cat in categorias_principais:
+            self.categoria_combo.addItem(cat.nome, cat.id)
+            
+            # Adicionar subcategorias com indentação
+            subcategorias = [c for c in categorias if c.categoria_pai_id == cat.id]
+            for subcat in subcategorias:
+                self.categoria_combo.addItem(f"  └─ {subcat.nome}", subcat.id)
     
     def toggle_data_fim(self, state):
         """Habilita/desabilita o campo de data de término."""
@@ -156,8 +218,14 @@ class GastoRecorrenteDialog(QDialog):
         """Retorna os dados do gasto recorrente do formulário."""
         nome = self.nome_edit.text().strip()
         
+        if self.receita_radio.isChecked():
+            tipo = 'R'
+        elif self.despesa_radio.isChecked():
+            tipo = 'D'
+        else:
+            tipo = 'T'
+        
         try:
-            # Substituir vírgula por ponto para conversão para Decimal
             valor_texto = self.valor_edit.text().strip().replace(',', '.')
             valor = Decimal(valor_texto)
             if valor <= 0:
@@ -181,6 +249,7 @@ class GastoRecorrenteDialog(QDialog):
         
         return {
             'nome': nome,
+            'tipo': tipo,
             'valor': valor,
             'dia_vencimento': dia_vencimento,
             'periodicidade': periodicidade,
@@ -208,11 +277,9 @@ class PagamentoDialog(QDialog):
         """Configura a interface do diálogo."""
         layout = QFormLayout(self)
         
-        # Informações do gasto
         info_label = QLabel(f"<b>{self.gasto.nome}</b><br>Valor: R$ {str(self.gasto.valor).replace('.', ',')}<br>Vencimento: Dia {self.gasto.dia_vencimento}")
         layout.addRow(info_label)
         
-        # Campos do formulário
         self.data_pagamento_edit = QDateEdit(self)
         self.data_pagamento_edit.setCalendarPopup(True)
         self.data_pagamento_edit.setDate(QDate.currentDate())
@@ -226,12 +293,10 @@ class PagamentoDialog(QDialog):
         self.gerar_transacao_check = QCheckBox("Gerar transação")
         self.gerar_transacao_check.setChecked(self.gasto.gerar_transacao)
         
-        # Adicionar campos ao layout
         layout.addRow("Data do Pagamento:", self.data_pagamento_edit)
         layout.addRow("Valor Pago:", self.valor_pago_edit)
         layout.addRow(self.gerar_transacao_check)
         
-        # Botões
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -244,7 +309,6 @@ class PagamentoDialog(QDialog):
         data_pagamento = self.data_pagamento_edit.date().toPyDate()
         
         try:
-            # Substituir vírgula por ponto para conversão para Decimal
             valor_texto = self.valor_pago_edit.text().strip().replace(',', '.')
             valor_pago = Decimal(valor_texto)
             if valor_pago <= 0:
@@ -275,10 +339,9 @@ class GastosRecorrentesView(QWidget):
         """Configura a interface do widget."""
         layout = QVBoxLayout(self)
         
-        # Área de filtros
+        # Filtros
         filtros_layout = QHBoxLayout()
         
-        # Filtro por mês/ano
         self.mes_combo = QComboBox()
         self.mes_combo.addItems(["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
                                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"])
@@ -293,12 +356,10 @@ class GastosRecorrentesView(QWidget):
         filtros_layout.addWidget(QLabel("Ano:"))
         filtros_layout.addWidget(self.ano_spin)
         
-        # Botão para aplicar filtros
         self.btn_filtrar = QPushButton("Filtrar")
         self.btn_filtrar.clicked.connect(self.carregar_gastos)
         filtros_layout.addWidget(self.btn_filtrar)
         
-        # Checkbox para mostrar apenas pendentes
         self.apenas_pendentes_check = QCheckBox("Apenas pendentes")
         self.apenas_pendentes_check.setChecked(True)
         filtros_layout.addWidget(self.apenas_pendentes_check)
@@ -306,7 +367,7 @@ class GastosRecorrentesView(QWidget):
         filtros_layout.addStretch()
         layout.addLayout(filtros_layout)
         
-        # Tabela de gastos recorrentes
+        # Tabela
         self.tabela_gastos = QTableWidget(0, 7)
         self.tabela_gastos.setHorizontalHeaderLabels(["ID", "Nome", "Valor", "Vencimento", "Categoria", "Status", "Ações"])
         self.tabela_gastos.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -314,7 +375,7 @@ class GastosRecorrentesView(QWidget):
         self.tabela_gastos.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.tabela_gastos)
         
-        # Botões de ação
+        # Botões
         btn_layout = QHBoxLayout()
         
         self.btn_novo = QPushButton("Novo Gasto Recorrente")
@@ -334,70 +395,52 @@ class GastosRecorrentesView(QWidget):
         btn_layout.addWidget(self.btn_atualizar)
         
         layout.addLayout(btn_layout)
-        
         self.setLayout(layout)
     
     def carregar_gastos(self):
         """Carrega os gastos recorrentes do banco de dados e exibe na tabela."""
-        # Obter mês e ano selecionados
         mes = self.mes_combo.currentIndex() + 1
         ano = self.ano_spin.value()
         apenas_pendentes = self.apenas_pendentes_check.isChecked()
         
-        # Limpar tabela
         self.tabela_gastos.setRowCount(0)
         
-        # Buscar todos os gastos recorrentes
         gastos = GastoRecorrente.listar_todos(apenas_ativos=True)
         
         for gasto in gastos:
-            # Verificar se o gasto está ativo para o mês/ano selecionado
             if gasto.data_inicio and date(ano, mes, 1) < gasto.data_inicio:
                 continue
             
             if gasto.data_fim and date(ano, mes, 28) > gasto.data_fim:
                 continue
             
-            # Verificar status de pagamento
             status_pagamento = gasto.verificar_pagamento(ano, mes)
             
-            # Se apenas pendentes e já está pago, pular
             if apenas_pendentes and status_pagamento.get('pago', False):
                 continue
             
             row = self.tabela_gastos.rowCount()
             self.tabela_gastos.insertRow(row)
             
-            # ID
             self.tabela_gastos.setItem(row, 0, QTableWidgetItem(str(gasto.id)))
-            
-            # Nome
             self.tabela_gastos.setItem(row, 1, QTableWidgetItem(gasto.nome))
-            
-            # Valor
             self.tabela_gastos.setItem(row, 2, QTableWidgetItem(f"R$ {gasto.valor:.2f}".replace('.', ',')))
-            
-            # Vencimento
             self.tabela_gastos.setItem(row, 3, QTableWidgetItem(f"Dia {gasto.dia_vencimento}"))
             
-            # Categoria
             categoria_nome = gasto.categoria.nome if gasto.categoria else "N/A"
             self.tabela_gastos.setItem(row, 4, QTableWidgetItem(categoria_nome))
             
-            # Status
             status_text = "Pago" if status_pagamento.get('pago', False) else "Pendente"
             status_item = QTableWidgetItem(status_text)
             if status_pagamento.get('pago', False):
-                status_item.setBackground(QColor(200, 255, 200))  # Verde claro
+                status_item.setBackground(QColor(200, 255, 200))
             else:
-                # Verificar se está vencido
                 hoje = date.today()
                 if ano < hoje.year or (ano == hoje.year and mes < hoje.month) or (ano == hoje.year and mes == hoje.month and gasto.dia_vencimento < hoje.day):
-                    status_item.setBackground(QColor(255, 200, 200))  # Vermelho claro
+                    status_item.setBackground(QColor(255, 200, 200))
             
             self.tabela_gastos.setItem(row, 5, status_item)
             
-            # Botão de ação para marcar como pago
             if not status_pagamento.get('pago', False):
                 btn_pagar = QPushButton("Pagar")
                 btn_pagar.setProperty("gasto_id", gasto.id)
@@ -416,9 +459,9 @@ class GastosRecorrentesView(QWidget):
                 QMessageBox.warning(self, "Erro", "O nome do gasto recorrente é obrigatório.")
                 return
             
-            # Criar e salvar o novo gasto recorrente
             gasto = GastoRecorrente(
                 nome=dados['nome'],
+                tipo=dados['tipo'],
                 valor=dados['valor'],
                 dia_vencimento=dados['dia_vencimento'],
                 periodicidade=dados['periodicidade'],
@@ -444,17 +487,14 @@ class GastosRecorrentesView(QWidget):
             QMessageBox.warning(self, "Aviso", "Selecione um gasto recorrente para editar.")
             return
         
-        # Obter o ID do gasto recorrente selecionado
         row = selected_rows[0].row()
         gasto_id = int(self.tabela_gastos.item(row, 0).text())
         
-        # Buscar o gasto recorrente no banco de dados
         gasto = GastoRecorrente.buscar_por_id(gasto_id)
         if not gasto:
             QMessageBox.critical(self, "Erro", "Gasto recorrente não encontrado.")
             return
         
-        # Abrir diálogo de edição
         dialog = GastoRecorrenteDialog(self, gasto)
         if dialog.exec_() == QDialog.Accepted:
             dados = dialog.get_gasto_recorrente_data()
@@ -463,8 +503,8 @@ class GastosRecorrentesView(QWidget):
                 QMessageBox.warning(self, "Erro", "O nome do gasto recorrente é obrigatório.")
                 return
             
-            # Atualizar dados do gasto recorrente
             gasto.nome = dados['nome']
+            gasto.tipo = dados['tipo']
             gasto.valor = dados['valor']
             gasto.dia_vencimento = dados['dia_vencimento']
             gasto.periodicidade = dados['periodicidade']
@@ -489,17 +529,14 @@ class GastosRecorrentesView(QWidget):
             QMessageBox.warning(self, "Aviso", "Selecione um gasto recorrente para excluir.")
             return
         
-        # Obter o ID do gasto recorrente selecionado
         row = selected_rows[0].row()
         gasto_id = int(self.tabela_gastos.item(row, 0).text())
         
-        # Buscar o gasto recorrente no banco de dados
         gasto = GastoRecorrente.buscar_por_id(gasto_id)
         if not gasto:
             QMessageBox.critical(self, "Erro", "Gasto recorrente não encontrado.")
             return
         
-        # Confirmar exclusão
         resposta = QMessageBox.question(
             self, 
             "Confirmar Exclusão", 
@@ -510,7 +547,6 @@ class GastosRecorrentesView(QWidget):
         if resposta == QMessageBox.No:
             return
         
-        # Desativar o gasto recorrente
         gasto.ativo = False
         if gasto.salvar():
             self.carregar_gastos()
@@ -520,24 +556,20 @@ class GastosRecorrentesView(QWidget):
     
     def marcar_como_pago(self):
         """Marca um gasto recorrente como pago para o mês atual."""
-        # Obter o botão que foi clicado
         btn = self.sender()
         gasto_id = btn.property("gasto_id")
         ano = btn.property("ano")
         mes = btn.property("mes")
         
-        # Buscar o gasto recorrente no banco de dados
         gasto = GastoRecorrente.buscar_por_id(gasto_id)
         if not gasto:
             QMessageBox.critical(self, "Erro", "Gasto recorrente não encontrado.")
             return
         
-        # Abrir diálogo para registrar pagamento
         dialog = PagamentoDialog(self, gasto, ano, mes)
         if dialog.exec_() == QDialog.Accepted:
             dados = dialog.get_pagamento_data()
             
-            # Marcar como pago
             if gasto.marcar_como_pago(ano, mes, dados['data_pagamento'], dados['valor_pago'], dados['gerar_transacao']):
                 self.carregar_gastos()
                 QMessageBox.information(self, "Sucesso", "Pagamento registrado com sucesso!")

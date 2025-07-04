@@ -11,7 +11,7 @@ class GastoRecorrente:
     """Classe para representar um gasto recorrente."""
     
     def __init__(self, id=None, nome=None, valor=0.0, dia_vencimento=1, 
-                 periodicidade="Mensal", categoria_id=None, conta_id=None, 
+                 periodicidade="Mensal", tipo='D', categoria_id=None, conta_id=None, 
                  meio_pagamento_id=None, data_inicio=None, data_fim=None,
                  gerar_transacao=False, observacao=None, ativo=True, data_criacao=None):
         self.id = id
@@ -19,6 +19,7 @@ class GastoRecorrente:
         self.valor = Decimal(str(valor)) if valor is not None else Decimal('0.0')
         self.dia_vencimento = dia_vencimento
         self.periodicidade = periodicidade
+        self.tipo = tipo  # 'R' para Receita, 'D' para Despesa, 'T' para Transferência
         self.categoria_id = categoria_id
         self.conta_id = conta_id
         self.meio_pagamento_id = meio_pagamento_id
@@ -64,12 +65,12 @@ class GastoRecorrente:
                 # Inserir novo gasto recorrente
                 cursor.execute(f"""
                     INSERT INTO {schema}.gastos_recorrentes 
-                    (nome, valor, dia_vencimento, periodicidade, categoria_id, 
+                    (nome, valor, dia_vencimento, periodicidade, tipo, categoria_id, 
                      conta_id, meio_pagamento_id, data_inicio, data_fim, 
                      gerar_transacao, observacao, ativo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (self.nome, self.valor, self.dia_vencimento, self.periodicidade, 
-                      self.categoria_id, self.conta_id, self.meio_pagamento_id, 
+                      self.tipo, self.categoria_id, self.conta_id, self.meio_pagamento_id, 
                       self.data_inicio, self.data_fim, self.gerar_transacao, 
                       self.observacao, self.ativo))
                 
@@ -84,12 +85,12 @@ class GastoRecorrente:
                 cursor.execute(f"""
                     UPDATE {schema}.gastos_recorrentes
                     SET nome = ?, valor = ?, dia_vencimento = ?, periodicidade = ?, 
-                        categoria_id = ?, conta_id = ?, meio_pagamento_id = ?, 
+                        tipo = ?, categoria_id = ?, conta_id = ?, meio_pagamento_id = ?, 
                         data_inicio = ?, data_fim = ?, gerar_transacao = ?, 
                         observacao = ?, ativo = ?
                     WHERE id = ?
                 """, (self.nome, self.valor, self.dia_vencimento, self.periodicidade, 
-                      self.categoria_id, self.conta_id, self.meio_pagamento_id, 
+                      self.tipo, self.categoria_id, self.conta_id, self.meio_pagamento_id, 
                       self.data_inicio, self.data_fim, self.gerar_transacao, 
                       self.observacao, self.ativo, self.id))
             
@@ -163,7 +164,7 @@ class GastoRecorrente:
                     descricao=f"Pagamento de {self.nome}",
                     valor=valor_pago,
                     data_transacao=data_pagamento,
-                    tipo='D',  # Despesa
+                    tipo=self.tipo,  # Usar o tipo do gasto recorrente
                     categoria_id=self.categoria_id,
                     conta_id=self.conta_id,
                     meio_pagamento_id=self.meio_pagamento_id,
@@ -256,6 +257,7 @@ class GastoRecorrente:
                     valor=row.valor,
                     dia_vencimento=row.dia_vencimento,
                     periodicidade=row.periodicidade,
+                    tipo=getattr(row, 'tipo', 'D'),  # Padrão 'D' se não existir
                     categoria_id=row.categoria_id,
                     conta_id=row.conta_id,
                     meio_pagamento_id=row.meio_pagamento_id,
@@ -297,6 +299,7 @@ class GastoRecorrente:
                     valor=row.valor,
                     dia_vencimento=row.dia_vencimento,
                     periodicidade=row.periodicidade,
+                    tipo=getattr(row, 'tipo', 'D'),  # Padrão 'D' se não existir
                     categoria_id=row.categoria_id,
                     conta_id=row.conta_id,
                     meio_pagamento_id=row.meio_pagamento_id,
@@ -313,62 +316,4 @@ class GastoRecorrente:
             
         except Exception as e:
             print(f"Erro ao listar gastos recorrentes: {e}")
-            return []
-    
-    @staticmethod
-    def listar_pagamentos_pendentes(ano=None, mes=None):
-        """Lista todos os pagamentos pendentes para um mês específico."""
-        if ano is None or mes is None:
-            hoje = date.today()
-            ano = hoje.year
-            mes = hoje.month
-        
-        db = get_db_connection()
-        pendentes = []
-        
-        try:
-            cursor = db.get_cursor()
-            schema = db.schema
-            
-            cursor.execute(f"""
-                SELECT g.*, p.id as pagamento_id, p.data_pagamento
-                FROM {schema}.gastos_recorrentes g
-                LEFT JOIN {schema}.pagamentos_recorrentes p 
-                    ON g.id = p.gasto_recorrente_id AND p.ano = ? AND p.mes = ?
-                WHERE g.ativo = 1
-                  AND (p.data_pagamento IS NULL OR p.id IS NULL)
-                  AND (g.data_inicio <= DATEFROMPARTS(?, ?, 28))
-                  AND (g.data_fim IS NULL OR g.data_fim >= DATEFROMPARTS(?, ?, 1))
-                ORDER BY g.dia_vencimento
-            """, (ano, mes, ano, mes, ano, mes))
-            
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                gasto = GastoRecorrente(
-                    id=row.id,
-                    nome=row.nome,
-                    valor=row.valor,
-                    dia_vencimento=row.dia_vencimento,
-                    periodicidade=row.periodicidade,
-                    categoria_id=row.categoria_id,
-                    conta_id=row.conta_id,
-                    meio_pagamento_id=row.meio_pagamento_id,
-                    data_inicio=row.data_inicio,
-                    data_fim=row.data_fim,
-                    gerar_transacao=row.gerar_transacao,
-                    observacao=row.observacao,
-                    ativo=row.ativo,
-                    data_criacao=row.data_criacao
-                )
-                pendentes.append({
-                    'gasto': gasto,
-                    'pagamento_id': getattr(row, 'pagamento_id', None),
-                    'data_vencimento': date(ano, mes, min(row.dia_vencimento, 28))
-                })
-            
-            return pendentes
-            
-        except Exception as e:
-            print(f"Erro ao listar pagamentos pendentes: {e}")
             return []
